@@ -1,0 +1,2 @@
+com.winter.cloud.common.swagger.config.WinterSwaggerRegistrar
+com.winter.cloud.common.swagger.config.WinterSwaggerAutoConfiguration

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>com.winter</groupId>
+        <artifactId>winter-cloud</artifactId>
+        <version>3.6.7</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <modules>
+        <module>winter-cloud-system</module>
+        <module>winter-cloud-gen</module>
+        <module>winter-cloud-job</module>
+        <module>winter-cloud-file</module>
+    </modules>
+
+    <artifactId>winter-cloud-modules</artifactId>
+    <packaging>pom</packaging>
+
+    <description>
+        winter-cloud-modules业务模块
+    </description>
+
+</project>

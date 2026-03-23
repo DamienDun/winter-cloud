@@ -1,0 +1,2 @@
+com.winter.cloud.common.log.service.AsyncLogService
+com.winter.cloud.common.log.aspect.LogAspect
