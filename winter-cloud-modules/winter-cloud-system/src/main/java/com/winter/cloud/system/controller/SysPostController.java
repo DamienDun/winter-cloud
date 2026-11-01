@@ -22,6 +22,8 @@ import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.common.security.utils.SecurityUtils;
 import com.winter.cloud.system.domain.SysPost;
 import com.winter.cloud.system.service.ISysPostService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 岗位信息操作处理
@@ -30,6 +32,7 @@ import com.winter.cloud.system.service.ISysPostService;
  */
 @RestController
 @RequestMapping("/post")
+@Tag(name = "岗位信息管理")
 public class SysPostController extends BaseController
 {
     @Autowired
@@ -40,6 +43,7 @@ public class SysPostController extends BaseController
      */
     @RequiresPermissions("system:post:list")
     @GetMapping("/list")
+    @Operation(summary = "获取岗位列表")
     public TableDataInfo list(SysPost post)
     {
         startPage();
@@ -50,6 +54,7 @@ public class SysPostController extends BaseController
     @Log(title = "岗位管理", businessType = BusinessType.EXPORT)
     @RequiresPermissions("system:post:export")
     @PostMapping("/export")
+    @Operation(summary = "导出数据")
     public void export(HttpServletResponse response, SysPost post)
     {
         List<SysPost> list = postService.selectPostList(post);
@@ -62,6 +67,7 @@ public class SysPostController extends BaseController
      */
     @RequiresPermissions("system:post:query")
     @GetMapping(value = "/{postId}")
+    @Operation(summary = "根据岗位编号获取详细信息")
     public AjaxResult getInfo(@PathVariable Long postId)
     {
         return success(postService.selectPostById(postId));
@@ -73,6 +79,7 @@ public class SysPostController extends BaseController
     @RequiresPermissions("system:post:add")
     @Log(title = "岗位管理", businessType = BusinessType.INSERT)
     @PostMapping
+    @Operation(summary = "新增岗位")
     public AjaxResult add(@Validated @RequestBody SysPost post)
     {
         if (!postService.checkPostNameUnique(post))
@@ -93,6 +100,7 @@ public class SysPostController extends BaseController
     @RequiresPermissions("system:post:edit")
     @Log(title = "岗位管理", businessType = BusinessType.UPDATE)
     @PutMapping
+    @Operation(summary = "修改岗位")
     public AjaxResult edit(@Validated @RequestBody SysPost post)
     {
         if (!postService.checkPostNameUnique(post))
@@ -113,6 +121,7 @@ public class SysPostController extends BaseController
     @RequiresPermissions("system:post:remove")
     @Log(title = "岗位管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{postIds}")
+    @Operation(summary = "删除岗位")
     public AjaxResult remove(@PathVariable Long[] postIds)
     {
         return toAjax(postService.deletePostByIds(postIds));
@@ -122,6 +131,7 @@ public class SysPostController extends BaseController
      * 获取岗位选择框列表
      */
     @GetMapping("/optionselect")
+    @Operation(summary = "获取岗位选择框列表")
     public AjaxResult optionselect()
     {
         List<SysPost> posts = postService.selectPostAll();

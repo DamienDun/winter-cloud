@@ -22,6 +22,8 @@ import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.system.api.model.LoginUser;
 import com.winter.cloud.system.domain.SysUserOnline;
 import com.winter.cloud.system.service.ISysUserOnlineService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 在线用户监控
@@ -30,6 +32,7 @@ import com.winter.cloud.system.service.ISysUserOnlineService;
  */
 @RestController
 @RequestMapping("/online")
+@Tag(name = "在线用户监控")
 public class SysUserOnlineController extends BaseController
 {
     @Autowired
@@ -40,6 +43,7 @@ public class SysUserOnlineController extends BaseController
 
     @RequiresPermissions("monitor:online:list")
     @GetMapping("/list")
+    @Operation(summary = "获取在线用户列表")
     public TableDataInfo list(String ipaddr, String userName)
     {
         Collection<String> keys = redisService.keys(CacheConstants.LOGIN_TOKEN_KEY + "*");
@@ -75,6 +79,7 @@ public class SysUserOnlineController extends BaseController
     @RequiresPermissions("monitor:online:forceLogout")
     @Log(title = "在线用户", businessType = BusinessType.FORCE)
     @DeleteMapping("/{tokenId}")
+    @Operation(summary = "强退用户")
     public AjaxResult forceLogout(@PathVariable String tokenId)
     {
         redisService.deleteObject(CacheConstants.LOGIN_TOKEN_KEY + tokenId);

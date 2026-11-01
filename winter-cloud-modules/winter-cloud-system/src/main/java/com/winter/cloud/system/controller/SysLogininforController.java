@@ -22,6 +22,8 @@ import com.winter.cloud.common.security.annotation.InnerAuth;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.system.api.domain.SysLogininfor;
 import com.winter.cloud.system.service.ISysLogininforService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 系统访问记录
@@ -30,6 +32,7 @@ import com.winter.cloud.system.service.ISysLogininforService;
  */
 @RestController
 @RequestMapping("/logininfor")
+@Tag(name = "系统访问记录管理")
 public class SysLogininforController extends BaseController
 {
     @Autowired
@@ -40,6 +43,7 @@ public class SysLogininforController extends BaseController
 
     @RequiresPermissions("system:logininfor:list")
     @GetMapping("/list")
+    @Operation(summary = "获取列表")
     public TableDataInfo list(SysLogininfor logininfor)
     {
         startPage();
@@ -50,6 +54,7 @@ public class SysLogininforController extends BaseController
     @Log(title = "登录日志", businessType = BusinessType.EXPORT)
     @RequiresPermissions("system:logininfor:export")
     @PostMapping("/export")
+    @Operation(summary = "导出数据")
     public void export(HttpServletResponse response, SysLogininfor logininfor)
     {
         List<SysLogininfor> list = logininforService.selectLogininforList(logininfor);
@@ -60,6 +65,7 @@ public class SysLogininforController extends BaseController
     @RequiresPermissions("system:logininfor:remove")
     @Log(title = "登录日志", businessType = BusinessType.DELETE)
     @DeleteMapping("/{infoIds}")
+    @Operation(summary = "删除登录日志")
     public AjaxResult remove(@PathVariable Long[] infoIds)
     {
         return toAjax(logininforService.deleteLogininforByIds(infoIds));
@@ -68,6 +74,7 @@ public class SysLogininforController extends BaseController
     @RequiresPermissions("system:logininfor:remove")
     @Log(title = "登录日志", businessType = BusinessType.DELETE)
     @DeleteMapping("/clean")
+    @Operation(summary = "清空登录日志")
     public AjaxResult clean()
     {
         logininforService.cleanLogininfor();
@@ -77,6 +84,7 @@ public class SysLogininforController extends BaseController
     @RequiresPermissions("system:logininfor:unlock")
     @Log(title = "账户解锁", businessType = BusinessType.OTHER)
     @GetMapping("/unlock/{userName}")
+    @Operation(summary = "账户解锁")
     public AjaxResult unlock(@PathVariable("userName") String userName)
     {
         redisService.deleteObject(CacheConstants.PWD_ERR_CNT_KEY + userName);
@@ -85,6 +93,7 @@ public class SysLogininforController extends BaseController
 
     @InnerAuth
     @PostMapping
+    @Operation(summary = "新增访问记录")
     public AjaxResult add(@RequestBody SysLogininfor logininfor)
     {
         return toAjax(logininforService.insertLogininfor(logininfor));

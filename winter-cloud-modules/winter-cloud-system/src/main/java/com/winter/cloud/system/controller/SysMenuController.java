@@ -21,6 +21,8 @@ import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.common.security.utils.SecurityUtils;
 import com.winter.cloud.system.domain.SysMenu;
 import com.winter.cloud.system.service.ISysMenuService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 菜单信息
@@ -29,6 +31,7 @@ import com.winter.cloud.system.service.ISysMenuService;
  */
 @RestController
 @RequestMapping("/menu")
+@Tag(name = "菜单信息管理")
 public class SysMenuController extends BaseController
 {
     @Autowired
@@ -39,6 +42,7 @@ public class SysMenuController extends BaseController
      */
     @RequiresPermissions("system:menu:list")
     @GetMapping("/list")
+    @Operation(summary = "获取菜单列表")
     public AjaxResult list(SysMenu menu)
     {
         Long userId = SecurityUtils.getUserId();
@@ -51,6 +55,7 @@ public class SysMenuController extends BaseController
      */
     @RequiresPermissions("system:menu:query")
     @GetMapping(value = "/{menuId}")
+    @Operation(summary = "根据菜单编号获取详细信息")
     public AjaxResult getInfo(@PathVariable Long menuId)
     {
         return success(menuService.selectMenuById(menuId));
@@ -60,6 +65,7 @@ public class SysMenuController extends BaseController
      * 获取菜单下拉树列表
      */
     @GetMapping("/treeselect")
+    @Operation(summary = "获取菜单下拉树列表")
     public AjaxResult treeselect(SysMenu menu)
     {
         Long userId = SecurityUtils.getUserId();
@@ -71,6 +77,7 @@ public class SysMenuController extends BaseController
      * 加载对应角色菜单列表树
      */
     @GetMapping(value = "/roleMenuTreeselect/{roleId}")
+    @Operation(summary = "加载对应角色菜单列表树")
     public AjaxResult roleMenuTreeselect(@PathVariable("roleId") Long roleId)
     {
         Long userId = SecurityUtils.getUserId();
@@ -87,6 +94,7 @@ public class SysMenuController extends BaseController
     @RequiresPermissions("system:menu:add")
     @Log(title = "菜单管理", businessType = BusinessType.INSERT)
     @PostMapping
+    @Operation(summary = "新增菜单")
     public AjaxResult add(@Validated @RequestBody SysMenu menu)
     {
         if (!menuService.checkMenuNameUnique(menu))
@@ -111,6 +119,7 @@ public class SysMenuController extends BaseController
     @RequiresPermissions("system:menu:edit")
     @Log(title = "菜单管理", businessType = BusinessType.UPDATE)
     @PutMapping
+    @Operation(summary = "修改菜单")
     public AjaxResult edit(@Validated @RequestBody SysMenu menu)
     {
         if (!menuService.checkMenuNameUnique(menu))
@@ -139,6 +148,7 @@ public class SysMenuController extends BaseController
     @RequiresPermissions("system:menu:remove")
     @Log(title = "菜单管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{menuId}")
+    @Operation(summary = "删除菜单")
     public AjaxResult remove(@PathVariable("menuId") Long menuId)
     {
         if (menuService.hasChildByMenuId(menuId))
@@ -158,6 +168,7 @@ public class SysMenuController extends BaseController
      * @return 路由信息
      */
     @GetMapping("getRouters")
+    @Operation(summary = "获取路由信息")
     public AjaxResult getRouters()
     {
         Long userId = SecurityUtils.getUserId();

@@ -20,6 +20,8 @@ import com.winter.cloud.common.security.annotation.InnerAuth;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.system.api.domain.SysOperLog;
 import com.winter.cloud.system.service.ISysOperLogService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 操作日志记录
@@ -28,6 +30,7 @@ import com.winter.cloud.system.service.ISysOperLogService;
  */
 @RestController
 @RequestMapping("/operlog")
+@Tag(name = "操作日志管理")
 public class SysOperlogController extends BaseController
 {
     @Autowired
@@ -35,6 +38,7 @@ public class SysOperlogController extends BaseController
 
     @RequiresPermissions("system:operlog:list")
     @GetMapping("/list")
+    @Operation(summary = "获取列表")
     public TableDataInfo list(SysOperLog operLog)
     {
         startPage();
@@ -45,6 +49,7 @@ public class SysOperlogController extends BaseController
     @Log(title = "操作日志", businessType = BusinessType.EXPORT)
     @RequiresPermissions("system:operlog:export")
     @PostMapping("/export")
+    @Operation(summary = "导出数据")
     public void export(HttpServletResponse response, SysOperLog operLog)
     {
         List<SysOperLog> list = operLogService.selectOperLogList(operLog);
@@ -55,6 +60,7 @@ public class SysOperlogController extends BaseController
     @Log(title = "操作日志", businessType = BusinessType.DELETE)
     @RequiresPermissions("system:operlog:remove")
     @DeleteMapping("/{operIds}")
+    @Operation(summary = "删除操作日志")
     public AjaxResult remove(@PathVariable Long[] operIds)
     {
         return toAjax(operLogService.deleteOperLogByIds(operIds));
@@ -63,6 +69,7 @@ public class SysOperlogController extends BaseController
     @RequiresPermissions("system:operlog:remove")
     @Log(title = "操作日志", businessType = BusinessType.CLEAN)
     @DeleteMapping("/clean")
+    @Operation(summary = "清空操作日志")
     public AjaxResult clean()
     {
         operLogService.cleanOperLog();
@@ -71,6 +78,7 @@ public class SysOperlogController extends BaseController
 
     @InnerAuth
     @PostMapping
+    @Operation(summary = "新增操作日志")
     public AjaxResult add(@RequestBody SysOperLog operLog)
     {
         return toAjax(operLogService.insertOperlog(operLog));

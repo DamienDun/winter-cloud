@@ -10,11 +10,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * 定时任务
  *
- * @author ruoyi
+ * @author winter
  */
 @EnableWinterSwagger(
-        title = "WINTER微服务系统服务接口文档",
-        description = "WINTER微服务系统服务接口文档",
+        title = "WINTER微服务定时任务接口文档",
+        description = "WINTER微服务定时任务接口文档",
         authorName = "WinterCloud",
         groups = {
                 @ApiGroup(groupName = "定时任务模块", packages = {"com.winter.cloud.job.controller"}),
@@ -22,10 +22,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @EnableCustomConfig
 @EnableRyFeignClients
 @SpringBootApplication
-public class WinterJobApplication
-{
-    public static void main(String[] args)
-    {
+public class WinterJobApplication {
+    public static void main(String[] args) {
         SpringApplication.run(WinterJobApplication.class, args);
         System.out.println("(♥◠‿◠)ﾉﾞ  定时任务模块启动成功   ლ(´ڡ`ლ)ﾞ  \n" +
                 " .-------.       ____     __        \n" +

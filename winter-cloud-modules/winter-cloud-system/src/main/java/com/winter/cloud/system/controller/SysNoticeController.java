@@ -20,6 +20,8 @@ import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.common.security.utils.SecurityUtils;
 import com.winter.cloud.system.domain.SysNotice;
 import com.winter.cloud.system.service.ISysNoticeService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 公告 信息操作处理
@@ -28,6 +30,7 @@ import com.winter.cloud.system.service.ISysNoticeService;
  */
 @RestController
 @RequestMapping("/notice")
+@Tag(name = "通知公告管理")
 public class SysNoticeController extends BaseController
 {
     @Autowired
@@ -38,6 +41,7 @@ public class SysNoticeController extends BaseController
      */
     @RequiresPermissions("system:notice:list")
     @GetMapping("/list")
+    @Operation(summary = "获取通知公告列表")
     public TableDataInfo list(SysNotice notice)
     {
         startPage();
@@ -50,6 +54,7 @@ public class SysNoticeController extends BaseController
      */
     @RequiresPermissions("system:notice:query")
     @GetMapping(value = "/{noticeId}")
+    @Operation(summary = "根据通知公告编号获取详细信息")
     public AjaxResult getInfo(@PathVariable Long noticeId)
     {
         return success(noticeService.selectNoticeById(noticeId));
@@ -61,6 +66,7 @@ public class SysNoticeController extends BaseController
     @RequiresPermissions("system:notice:add")
     @Log(title = "通知公告", businessType = BusinessType.INSERT)
     @PostMapping
+    @Operation(summary = "新增通知公告")
     public AjaxResult add(@Validated @RequestBody SysNotice notice)
     {
         notice.setCreateBy(SecurityUtils.getUsername());
@@ -73,6 +79,7 @@ public class SysNoticeController extends BaseController
     @RequiresPermissions("system:notice:edit")
     @Log(title = "通知公告", businessType = BusinessType.UPDATE)
     @PutMapping
+    @Operation(summary = "修改通知公告")
     public AjaxResult edit(@Validated @RequestBody SysNotice notice)
     {
         notice.setUpdateBy(SecurityUtils.getUsername());
@@ -85,6 +92,7 @@ public class SysNoticeController extends BaseController
     @RequiresPermissions("system:notice:remove")
     @Log(title = "通知公告", businessType = BusinessType.DELETE)
     @DeleteMapping("/{noticeIds}")
+    @Operation(summary = "删除通知公告")
     public AjaxResult remove(@PathVariable Long[] noticeIds)
     {
         return toAjax(noticeService.deleteNoticeByIds(noticeIds));

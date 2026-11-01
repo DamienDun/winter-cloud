@@ -27,6 +27,8 @@ import com.winter.cloud.system.api.domain.SysFile;
 import com.winter.cloud.system.api.domain.SysUser;
 import com.winter.cloud.system.api.model.LoginUser;
 import com.winter.cloud.system.service.ISysUserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 个人信息 业务处理
@@ -35,6 +37,7 @@ import com.winter.cloud.system.service.ISysUserService;
  */
 @RestController
 @RequestMapping("/user/profile")
+@Tag(name = "个人信息管理")
 public class SysProfileController extends BaseController
 {
     @Autowired
@@ -50,6 +53,7 @@ public class SysProfileController extends BaseController
      * 个人信息
      */
     @GetMapping
+    @Operation(summary = "个人信息")
     public AjaxResult profile()
     {
         String username = SecurityUtils.getUsername();
@@ -65,6 +69,7 @@ public class SysProfileController extends BaseController
      */
     @Log(title = "个人信息", businessType = BusinessType.UPDATE)
     @PutMapping
+    @Operation(summary = "修改用户")
     public AjaxResult updateProfile(@RequestBody SysUser user)
     {
         LoginUser loginUser = SecurityUtils.getLoginUser();
@@ -95,6 +100,7 @@ public class SysProfileController extends BaseController
      */
     @Log(title = "个人信息", businessType = BusinessType.UPDATE)
     @PutMapping("/updatePwd")
+    @Operation(summary = "重置密码")
     public AjaxResult updatePwd(@RequestBody Map<String, String> params)
     {
         String oldPassword = params.get("oldPassword");
@@ -127,6 +133,7 @@ public class SysProfileController extends BaseController
      */
     @Log(title = "用户头像", businessType = BusinessType.UPDATE)
     @PostMapping("/avatar")
+    @Operation(summary = "头像上传")
     public AjaxResult avatar(@RequestParam("avatarfile") MultipartFile file)
     {
         if (!file.isEmpty())

@@ -42,6 +42,8 @@ import com.winter.cloud.system.service.ISysPermissionService;
 import com.winter.cloud.system.service.ISysPostService;
 import com.winter.cloud.system.service.ISysRoleService;
 import com.winter.cloud.system.service.ISysUserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 用户信息
@@ -50,6 +52,7 @@ import com.winter.cloud.system.service.ISysUserService;
  */
 @RestController
 @RequestMapping("/user")
+@Tag(name = "用户信息管理")
 public class SysUserController extends BaseController
 {
     @Autowired
@@ -78,6 +81,7 @@ public class SysUserController extends BaseController
      */
     @RequiresPermissions("system:user:list")
     @GetMapping("/list")
+    @Operation(summary = "获取用户列表")
     public TableDataInfo list(SysUser user)
     {
         startPage();
@@ -88,6 +92,7 @@ public class SysUserController extends BaseController
     @Log(title = "用户管理", businessType = BusinessType.EXPORT)
     @RequiresPermissions("system:user:export")
     @PostMapping("/export")
+    @Operation(summary = "导出数据")
     public void export(HttpServletResponse response, SysUser user)
     {
         List<SysUser> list = userService.selectUserList(user);
@@ -98,6 +103,7 @@ public class SysUserController extends BaseController
     @Log(title = "用户管理", businessType = BusinessType.IMPORT)
     @RequiresPermissions("system:user:import")
     @PostMapping("/importData")
+    @Operation(summary = "导入用户数据")
     public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception
     {
         ExcelUtil<SysUser> util = new ExcelUtil<SysUser>(SysUser.class);
@@ -108,6 +114,7 @@ public class SysUserController extends BaseController
     }
 
     @PostMapping("/importTemplate")
+    @Operation(summary = "下载用户导入模板")
     public void importTemplate(HttpServletResponse response) throws IOException
     {
         ExcelUtil<SysUser> util = new ExcelUtil<SysUser>(SysUser.class);
@@ -119,6 +126,7 @@ public class SysUserController extends BaseController
      */
     @InnerAuth
     @GetMapping("/info/{username}")
+    @Operation(summary = "获取当前用户信息")
     public R<LoginUser> info(@PathVariable("username") String username)
     {
         SysUser sysUser = userService.selectUserByUserName(username);
@@ -142,6 +150,7 @@ public class SysUserController extends BaseController
      */
     @InnerAuth
     @PostMapping("/register")
+    @Operation(summary = "注册用户信息")
     public R<Boolean> register(@RequestBody SysUser sysUser)
     {
         String username = sysUser.getUserName();
@@ -161,6 +170,7 @@ public class SysUserController extends BaseController
      */
     @InnerAuth
     @PutMapping("/recordlogin")
+    @Operation(summary = "记录用户登录IP地址和登录时间")
     public R<Boolean> recordlogin(@RequestBody SysUser sysUser)
     {
         return R.ok(userService.updateLoginInfo(sysUser));
@@ -172,6 +182,7 @@ public class SysUserController extends BaseController
      * @return 用户信息
      */
     @GetMapping("getInfo")
+    @Operation(summary = "获取用户信息")
     public AjaxResult getInfo()
     {
         LoginUser loginUser = SecurityUtils.getLoginUser();
@@ -223,6 +234,7 @@ public class SysUserController extends BaseController
      */
     @RequiresPermissions("system:user:query")
     @GetMapping(value = { "/", "/{userId}" })
+    @Operation(summary = "根据用户编号获取详细信息")
     public AjaxResult getInfo(@PathVariable(value = "userId", required = false) Long userId)
     {
         AjaxResult ajax = AjaxResult.success();
@@ -246,6 +258,7 @@ public class SysUserController extends BaseController
     @RequiresPermissions("system:user:add")
     @Log(title = "用户管理", businessType = BusinessType.INSERT)
     @PostMapping
+    @Operation(summary = "新增用户")
     public AjaxResult add(@Validated @RequestBody SysUser user)
     {
         deptService.checkDeptDataScope(user.getDeptId());
@@ -273,6 +286,7 @@ public class SysUserController extends BaseController
     @RequiresPermissions("system:user:edit")
     @Log(title = "用户管理", businessType = BusinessType.UPDATE)
     @PutMapping
+    @Operation(summary = "修改用户")
     public AjaxResult edit(@Validated @RequestBody SysUser user)
     {
         userService.checkUserAllowed(user);
@@ -301,6 +315,7 @@ public class SysUserController extends BaseController
     @RequiresPermissions("system:user:remove")
     @Log(title = "用户管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{userIds}")
+    @Operation(summary = "删除用户")
     public AjaxResult remove(@PathVariable Long[] userIds)
     {
         if (ArrayUtils.contains(userIds, SecurityUtils.getUserId()))
@@ -316,6 +331,7 @@ public class SysUserController extends BaseController
     @RequiresPermissions("system:user:edit")
     @Log(title = "用户管理", businessType = BusinessType.UPDATE)
     @PutMapping("/resetPwd")
+    @Operation(summary = "重置密码")
     public AjaxResult resetPwd(@RequestBody SysUser user)
     {
         userService.checkUserAllowed(user);
@@ -331,6 +347,7 @@ public class SysUserController extends BaseController
     @RequiresPermissions("system:user:edit")
     @Log(title = "用户管理", businessType = BusinessType.UPDATE)
     @PutMapping("/changeStatus")
+    @Operation(summary = "状态修改")
     public AjaxResult changeStatus(@RequestBody SysUser user)
     {
         userService.checkUserAllowed(user);
@@ -344,6 +361,7 @@ public class SysUserController extends BaseController
      */
     @RequiresPermissions("system:user:query")
     @GetMapping("/authRole/{userId}")
+    @Operation(summary = "根据用户编号获取授权角色")
     public AjaxResult authRole(@PathVariable("userId") Long userId)
     {
         AjaxResult ajax = AjaxResult.success();
@@ -360,6 +378,7 @@ public class SysUserController extends BaseController
     @RequiresPermissions("system:user:edit")
     @Log(title = "用户管理", businessType = BusinessType.GRANT)
     @PutMapping("/authRole")
+    @Operation(summary = "用户授权角色")
     public AjaxResult insertAuthRole(Long userId, Long[] roleIds)
     {
         userService.checkUserDataScope(userId);
@@ -373,6 +392,7 @@ public class SysUserController extends BaseController
      */
     @RequiresPermissions("system:user:list")
     @GetMapping("/deptTree")
+    @Operation(summary = "获取部门树列表")
     public AjaxResult deptTree(SysDept dept)
     {
         return success(deptService.selectDeptTreeList(dept));
