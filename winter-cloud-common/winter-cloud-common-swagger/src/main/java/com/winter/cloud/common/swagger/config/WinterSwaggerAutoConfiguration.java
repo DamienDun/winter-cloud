@@ -82,12 +82,22 @@ public class WinterSwaggerAutoConfiguration {
     }
 
     /**
-     * 将 @EnableWinterSwagger 的 headerParameters 追加到每个接口（服务级 + 业务分组均生效）。
+     * 为每个 Operation 挂上鉴权方案，并追加 @EnableWinterSwagger 声明的全局请求头。
+     * <p>
+     * Knife4j 4.x 只认 Operation 上的 {@code security}；仅在 OpenAPI 根节点声明时，
+     * Authorize 填了值也不会带到调试请求里。
+     * </p>
      */
     @Bean
-    public GlobalOpenApiCustomizer winterHeaderParameterCustomizer(
+    public GlobalOpenApiCustomizer winterOperationSecurityCustomizer(
+            TokenConfig tokenConfig,
             @Autowired(required = false) WinterSwaggerApiInfo winterSwaggerApiInfo) {
-        return openApi -> appendHeaders(openApi, winterSwaggerApiInfo);
+        String schemeName = tokenConfig.getHeader();
+        return openApi -> {
+            ensureSecurityScheme(openApi, tokenConfig, schemeName);
+            applyOperationSecurity(openApi, schemeName);
+            appendHeaders(openApi, winterSwaggerApiInfo);
+        };
     }
 
     /**
@@ -111,7 +121,10 @@ public class WinterSwaggerAutoConfiguration {
         };
     }
 
-    /** 网关转发通常带 X-Forwarded-* / Forwarded；直连服务端口一般没有。 */
+    /**
+     * 判断当前文档请求是否经网关转发。
+     * 网关通常带 X-Forwarded-* / Forwarded；直连服务端口一般没有。
+     */
     private boolean isRequestViaGateway() {
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attributes == null) {
@@ -123,6 +136,9 @@ public class WinterSwaggerAutoConfiguration {
                 || StringUtils.isNotEmpty(request.getHeader("Forwarded"));
     }
 
+    /**
+     * 将 OpenAPI paths 统一加上网关路由前缀（已带前缀的 path 不重复追加）。
+     */
     private void applyGatewayPathPrefix(OpenAPI openApi, String prefix) {
         if (StringUtils.isEmpty(prefix) || openApi.getPaths() == null || openApi.getPaths().isEmpty()) {
             return;
@@ -134,6 +150,9 @@ public class WinterSwaggerAutoConfiguration {
         openApi.setPaths(rewritten);
     }
 
+    /**
+     * 给 path 拼接前缀；path 已等于或已以 prefix/ 开头时原样返回。
+     */
     private String withPrefix(String prefix, String path) {
         if (path.equals(prefix) || path.startsWith(prefix + "/")) {
             return path;
@@ -141,6 +160,9 @@ public class WinterSwaggerAutoConfiguration {
         return path.startsWith("/") ? prefix + path : prefix + "/" + path;
     }
 
+    /**
+     * 解析 swagger.gatewayUrl；为空或非法时返回 null。
+     */
     private URI parseGatewayUri(String gatewayUrl) {
         if (StringUtils.isEmpty(gatewayUrl)) {
             return null;
@@ -152,7 +174,10 @@ public class WinterSwaggerAutoConfiguration {
         }
     }
 
-    /** http://localhost:8080/winter-auth → http://localhost:8080 */
+    /**
+     * 取网关 origin（不含 path）。
+     * 例：http://localhost:8080/winter-auth → http://localhost:8080
+     */
     private String originOf(URI gatewayUri, String fallback) {
         if (gatewayUri == null || StringUtils.isEmpty(gatewayUri.getScheme()) || StringUtils.isEmpty(gatewayUri.getHost())) {
             return fallback;
@@ -165,7 +190,10 @@ public class WinterSwaggerAutoConfiguration {
         return origin.toString();
     }
 
-    /** http://localhost:8080/winter-auth → /winter-auth */
+    /**
+     * 取网关 URL 中的服务路径前缀（去掉末尾 /）。
+     * 例：http://localhost:8080/winter-auth → /winter-auth
+     */
     private String pathPrefix(URI gatewayUri) {
         if (gatewayUri == null) {
             return null;
@@ -180,6 +208,44 @@ public class WinterSwaggerAutoConfiguration {
         return path.startsWith("/") ? path : "/" + path;
     }
 
+    /**
+     * 确保 OpenAPI 根上存在指定名称的 SecurityScheme 与全局 SecurityRequirement。
+     */
+    private void ensureSecurityScheme(OpenAPI openApi, TokenConfig tokenConfig, String schemeName) {
+        if (openApi.getComponents() == null) {
+            openApi.setComponents(new Components());
+        }
+        if (openApi.getComponents().getSecuritySchemes() == null
+                || !openApi.getComponents().getSecuritySchemes().containsKey(schemeName)) {
+            openApi.getComponents().addSecuritySchemes(schemeName, securityScheme(tokenConfig));
+        }
+        if (openApi.getSecurity() == null || openApi.getSecurity().isEmpty()) {
+            openApi.addSecurityItem(new SecurityRequirement().addList(schemeName));
+        }
+    }
+
+    /**
+     * 给尚未声明 security 的 Operation 挂上鉴权方案，供 Knife4j Authorize 生效。
+     * 已显式声明（含空数组表示匿名）的接口不覆盖。
+     */
+    private void applyOperationSecurity(OpenAPI openApi, String schemeName) {
+        if (openApi.getPaths() == null) {
+            return;
+        }
+        SecurityRequirement requirement = new SecurityRequirement().addList(schemeName);
+        for (PathItem pathItem : openApi.getPaths().values()) {
+            for (Operation operation : pathItem.readOperations()) {
+                if (operation.getSecurity() != null) {
+                    continue;
+                }
+                operation.addSecurityItem(requirement);
+            }
+        }
+    }
+
+    /**
+     * 将 @EnableWinterSwagger.headerParameters 追加到每个 Operation（同名 header 不重复添加）。
+     */
     private void appendHeaders(OpenAPI openApi, WinterSwaggerApiInfo apiInfo) {
         if (openApi.getPaths() == null || apiInfo == null || apiInfo.getHeaderParameters() == null) {
             return;
@@ -196,6 +262,9 @@ public class WinterSwaggerAutoConfiguration {
         }
     }
 
+    /**
+     * 判断 Operation 是否已包含指定名称的 header 参数。
+     */
     private boolean hasHeader(Operation operation, String name) {
         List<Parameter> parameters = operation.getParameters();
         if (parameters == null) {
@@ -209,7 +278,10 @@ public class WinterSwaggerAutoConfiguration {
         return false;
     }
 
-    /** dataType 是参数 schema 的 type，不是 Content-Type。 */
+    /**
+     * 将注解中的头参数转为 OpenAPI Parameter。
+     * dataType 对应 schema.type，不是 Content-Type。
+     */
     private Parameter headerParameter(WinterSwaggerApiHeaderParameterInfo header) {
         String type = StringUtils.isEmpty(header.getDataType()) ? "string" : header.getDataType();
         Schema<String> schema = new Schema<String>();
@@ -222,13 +294,23 @@ public class WinterSwaggerAutoConfiguration {
                 .schema(schema);
     }
 
+    /**
+     * 构建 HTTP Bearer 安全方案。
+     * Authorize 填 token 后自动带 {@code Authorization: Bearer xxx}；网关/服务端会裁剪前缀。
+     */
     private SecurityScheme securityScheme(TokenConfig tokenConfig) {
-        return new SecurityScheme().type(SecurityScheme.Type.APIKEY)
+        return new SecurityScheme()
+                .type(SecurityScheme.Type.HTTP)
+                .scheme("bearer")
+                .bearerFormat("JWT")
                 .name(tokenConfig.getHeader())
                 .in(SecurityScheme.In.HEADER)
-                .scheme(tokenConfig.getPrefix());
+                .description("在 Authorize 中填写登录后的 access_token（无需手动加 Bearer 前缀）");
     }
 
+    /**
+     * 合并注解与配置文件中的文档信息；配置优先，缺省时用服务名作 title。
+     */
     private Info convertInfo(WinterSwaggerProperties.InfoProperties infoProperties, WinterSwaggerApiInfo apiInfo,
                              String projectVersion, String serviceName) {
         Info info = new Info();
@@ -270,6 +352,9 @@ public class WinterSwaggerAutoConfiguration {
         return info;
     }
 
+    /**
+     * 从注解信息组装 Contact。
+     */
     private Contact createContactInfo(WinterSwaggerApiInfo apiInfo) {
         Contact contact = new Contact();
         contact.setName(apiInfo.getAuthorName());
@@ -278,6 +363,9 @@ public class WinterSwaggerAutoConfiguration {
         return contact;
     }
 
+    /**
+     * 读取 spring.application.name，缺省返回 application。
+     */
     private String serviceName(Environment environment) {
         String serviceName = environment.getProperty("spring.application.name");
         return StringUtils.isEmpty(serviceName) ? "application" : serviceName;

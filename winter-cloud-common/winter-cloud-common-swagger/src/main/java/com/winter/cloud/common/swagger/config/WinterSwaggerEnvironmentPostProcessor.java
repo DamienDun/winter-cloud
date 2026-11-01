@@ -1,4 +1,4 @@
-﻿package com.winter.cloud.common.swagger.config;
+package com.winter.cloud.common.swagger.config;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;
@@ -15,8 +15,13 @@ import java.util.Map;
  */
 public class WinterSwaggerEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
+    /** PropertySource 名称，避免重复注册。 */
     private static final String PROPERTY_SOURCE = "winterSwaggerDefaults";
 
+    /**
+     * 在环境准备阶段写入 springdoc 默认项：禁用 OpenAPI 缓存。
+     * 这样同一进程内直连与经网关拉取文档时，可按请求分别决定是否改写路径前缀。
+     */
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         if (environment.getPropertySources().contains(PROPERTY_SOURCE)) {
