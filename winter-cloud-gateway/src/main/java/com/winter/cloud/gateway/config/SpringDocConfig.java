@@ -45,7 +45,7 @@ public class SpringDocConfig implements InitializingBean {
 class SwaggerDocRegister extends Subscriber<InstancesChangeEvent> {
 
     private static final String[] EXCLUDE_ROUTES = new String[]{
-            "winter-gateway", "winter-auth", "winter-monitor"
+            "winter-gateway", "winter-monitor"
     };
 
     private final SwaggerUiConfigProperties swaggerUiConfigProperties;
