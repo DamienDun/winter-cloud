@@ -59,14 +59,12 @@
         <dependency>
             <groupId>org.redisson</groupId>
             <artifactId>redisson</artifactId>
-            <version>${redisson.version}</version>
             <optional>true</optional>
         </dependency>
 
         <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
-            <version>${commons.io.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
@@ -77,35 +75,30 @@
         <dependency>
             <groupId>com.aliyun.oss</groupId>
             <artifactId>aliyun-sdk-oss</artifactId>
-            <version>${aliyun.sdk.oss.version}</version>
         </dependency>
 
         <!-- FastDFS -->
         <dependency>
             <groupId>cn.bestwu</groupId>
             <artifactId>fastdfs-client-java</artifactId>
-            <version>${fastdfs.client.version}</version>
         </dependency>
 
         <!-- MinIO（与源模块 API 对齐，使用 7.x） -->
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
-            <version>${minio.client.version}</version>
         </dependency>
 
         <!-- AWS S3 -->
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-s3</artifactId>
-            <version>${aws.s3.sdk.version}</version>
         </dependency>
 
         <!-- 华为 OBS -->
         <dependency>
             <groupId>com.huaweicloud</groupId>
             <artifactId>esdk-obs-java</artifactId>
-            <version>${huawei.obs.client.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.squareup.okhttp3</groupId>
@@ -142,7 +135,6 @@
         <dependency>
             <groupId>com.qcloud</groupId>
             <artifactId>cos_api</artifactId>
-            <version>${tencent.cos.client.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.apache.httpcomponents</groupId>
