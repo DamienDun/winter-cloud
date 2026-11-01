@@ -1,0 +1,4 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.winter.cloud.common.filestorage.configure.WinterStorageAutoConfiguration,\
+com.winter.cloud.common.filestorage.configure.WinterStorageLockConfiguration,\
+com.winter.cloud.common.filestorage.configure.WinterStorageMybatisConfiguration

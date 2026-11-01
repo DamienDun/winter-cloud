@@ -18,6 +18,7 @@
         <module>winter-cloud-common-sensitive</module>
         <module>winter-cloud-common-datascope</module>
         <module>winter-cloud-common-datasource</module>
+        <module>winter-cloud-file-storage</module>
     </modules>
 
     <artifactId>winter-cloud-common</artifactId>

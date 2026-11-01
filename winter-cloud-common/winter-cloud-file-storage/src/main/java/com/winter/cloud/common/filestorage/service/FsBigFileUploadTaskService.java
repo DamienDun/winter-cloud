@@ -1,0 +1,43 @@
+package com.winter.cloud.common.filestorage.service;
+
+import com.winter.cloud.common.filestorage.dto.FsBigFileUploadTaskInput;
+
+import java.util.Set;
+
+/**
+ * 大文件上传任务服务
+ *
+ * @author Damien
+ */
+public interface FsBigFileUploadTaskService {
+
+    /**
+     * 新增任务
+     */
+    FsBigFileUploadTaskInput add(FsBigFileUploadTaskInput input);
+
+    /**
+     * 更新完成字节与状态
+     */
+    void updateCompleteBytesAndStatus(Long id, Long completeBytes, Integer status, Set<Integer> uploadedPartNumberList);
+
+    /**
+     * 按 uploadId 更新完成字节与状态
+     */
+    void updateCompleteBytesAndStatus(String uploadId, Long completeBytes, Integer status, Set<Integer> uploadedPartNumberList);
+
+    /**
+     * 根据文件 md5 查询
+     */
+    FsBigFileUploadTaskInput queryByFileMd5(String fileMd5);
+
+    /**
+     * 根据 uploadId 查询
+     */
+    FsBigFileUploadTaskInput queryByUploadId(String uploadId);
+
+    /**
+     * 取消任务
+     */
+    void cancel(Long id);
+}
