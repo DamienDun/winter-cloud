@@ -19,9 +19,8 @@ public class WinterSwaggerProperties {
     private boolean enabled = true;
 
     /**
-     * 网关对外地址，需要带上该服务的路由前缀。
-     * 例如 http://127.0.0.1:8080/winter-system。
-     * 留空时按当前请求地址生成，适合直连服务调试。
+     * 网关对外地址，建议带服务名：http://localhost:8080/${spring.application.name}。
+     * 仅当文档请求经网关转发时，才把 URL 路径前缀写入 paths；直连服务端口保持原始路径。
      */
     private String gatewayUrl;
 
