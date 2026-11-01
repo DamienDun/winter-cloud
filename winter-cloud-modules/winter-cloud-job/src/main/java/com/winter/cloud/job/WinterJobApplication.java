@@ -1,15 +1,24 @@
 package com.winter.cloud.job;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
 import com.winter.cloud.common.security.annotation.EnableCustomConfig;
 import com.winter.cloud.common.security.annotation.EnableRyFeignClients;
+import com.winter.cloud.common.swagger.annotation.ApiGroup;
+import com.winter.cloud.common.swagger.annotation.EnableWinterSwagger;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
  * 定时任务
  *
  * @author ruoyi
  */
+@EnableWinterSwagger(
+        title = "WINTER微服务系统服务接口文档",
+        description = "WINTER微服务系统服务接口文档",
+        authorName = "WinterCloud",
+        groups = {
+                @ApiGroup(groupName = "定时任务模块", packages = {"com.winter.cloud.job.controller"}),
+        })
 @EnableCustomConfig
 @EnableRyFeignClients
 @SpringBootApplication
