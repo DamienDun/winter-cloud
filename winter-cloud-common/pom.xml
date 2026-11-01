@@ -20,6 +20,7 @@
         <module>winter-cloud-common-datasource</module>
         <module>winter-cloud-file-storage</module>
         <module>winter-cloud-dingtalk</module>
+        <module>winter-cloud-web</module>
     </modules>
 
     <artifactId>winter-cloud-common</artifactId>

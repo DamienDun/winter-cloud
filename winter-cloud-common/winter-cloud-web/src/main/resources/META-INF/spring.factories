@@ -1,0 +1,2 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.winter.cloud.common.web.configure.WinterWebAutoConfiguration

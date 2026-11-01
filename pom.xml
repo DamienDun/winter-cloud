@@ -321,6 +321,13 @@
                 <version>${winter.version}</version>
             </dependency>
 
+            <!-- Web 响应体/下载工具 -->
+            <dependency>
+                <groupId>com.winter</groupId>
+                <artifactId>winter-cloud-web</artifactId>
+                <version>${winter.version}</version>
+            </dependency>
+
             <!-- 钉钉旧版 SDK -->
             <dependency>
                 <groupId>com.aliyun</groupId>

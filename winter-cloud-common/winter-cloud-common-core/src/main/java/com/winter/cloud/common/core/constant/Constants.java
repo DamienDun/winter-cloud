@@ -151,4 +151,19 @@ public interface Constants {
      * redis普通方式生成token(实际也是jwt,只是用了redis去缓存)
      */
     String TOKEN_CREATE_REDIS = "redis";
+
+    /**
+     * 响应头业务码
+     */
+    String RESP_HEADER_CODE = "resp-code";
+
+    /**
+     * 响应头时间
+     */
+    String RESP_HEADER_DATE = "resp-date";
+
+    /**
+     * CORS 暴露自定义响应头
+     */
+    String RESP_ACCESS_CONTROL_EXPOSE_HEADERS = "Access-Control-Expose-Headers";
 }
