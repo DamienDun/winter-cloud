@@ -76,15 +76,17 @@
             <artifactId>winter-cloud-common-redis</artifactId>
         </dependency>
 
-        <!-- Springdoc -->
-<!--        <dependency>-->
-<!--            <groupId>org.springdoc</groupId>-->
-<!--            <artifactId>springdoc-openapi-webflux-ui</artifactId>-->
-<!--            <version>${springdoc.version}</version>-->
-<!--        </dependency>-->
+        <!-- Knife4j WebFlux 文档页（网关是 WebFlux，不能用 MVC 版 starter） -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-openapi3-spring-boot-starter</artifactId>
+            <artifactId>knife4j-openapi3-webflux-spring-boot-starter</artifactId>
+            <version>${knife4j.version}</version>
+        </dependency>
+        <!-- 网关聚合各服务 OpenAPI -->
+        <dependency>
+            <groupId>com.github.xiaoymin</groupId>
+            <artifactId>knife4j-gateway-spring-boot-starter</artifactId>
+            <version>${knife4j.version}</version>
         </dependency>
 
     </dependencies>

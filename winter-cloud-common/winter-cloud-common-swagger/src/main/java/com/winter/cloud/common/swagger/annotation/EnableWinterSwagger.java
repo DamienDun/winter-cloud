@@ -1,5 +1,8 @@
 package com.winter.cloud.common.swagger.annotation;
 
+import com.winter.cloud.common.swagger.config.WinterSwaggerRegistrar;
+import org.springframework.context.annotation.Import;
+
 import java.lang.annotation.*;
 
 /**
@@ -14,6 +17,7 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 @Documented
+@Import(WinterSwaggerRegistrar.class)
 public @interface EnableWinterSwagger {
 
     /**

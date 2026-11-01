@@ -13,82 +13,75 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
- * SpringDoc配置类
- *
- * @author ruoyi
+ * 网关侧 SpringDoc / Swagger UI 聚合。
+ * Knife4j 走 knife4j.gateway 配置；这里只给 /swagger-ui 兜底。
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(value = "springdoc.api-docs.enabled", matchIfMissing = true)
-public class SpringDocConfig implements InitializingBean
-{
+public class SpringDocConfig implements InitializingBean {
+
     @Autowired
     private SwaggerUiConfigProperties swaggerUiConfigProperties;
 
     @Autowired
     private DiscoveryClient discoveryClient;
 
-    /**
-     * 在初始化后调用的方法
-     */
     @Override
-    public void afterPropertiesSet()
-    {
-        NotifyCenter.registerSubscriber(new SwaggerDocRegister(swaggerUiConfigProperties, discoveryClient));
+    public void afterPropertiesSet() {
+        SwaggerDocRegister register = new SwaggerDocRegister(swaggerUiConfigProperties, discoveryClient);
+        // 启动时先刷一次，不能只等 Nacos 实例变更事件
+        register.refresh();
+        NotifyCenter.registerSubscriber(register);
     }
 }
 
 /**
- * Swagger文档注册器
+ * 按服务名聚合 OpenAPI。发现客户端路径是 /{serviceId}/**，文档地址因此带服务前缀。
  */
-class SwaggerDocRegister extends Subscriber<InstancesChangeEvent>
-{
-    @Autowired
-    private SwaggerUiConfigProperties swaggerUiConfigProperties;
+class SwaggerDocRegister extends Subscriber<InstancesChangeEvent> {
 
-    @Autowired
-    private DiscoveryClient discoveryClient;
+    private static final String[] EXCLUDE_ROUTES = new String[]{
+            "winter-gateway", "winter-auth", "winter-file", "winter-monitor"
+    };
 
-    private final static String[] EXCLUDE_ROUTES = new String[] { "winter-gateway", "winter-auth", "winter-file", "winter-monitor" };
+    private final SwaggerUiConfigProperties swaggerUiConfigProperties;
 
-    public SwaggerDocRegister(SwaggerUiConfigProperties swaggerUiConfigProperties, DiscoveryClient discoveryClient)
-    {
+    private final DiscoveryClient discoveryClient;
+
+    SwaggerDocRegister(SwaggerUiConfigProperties swaggerUiConfigProperties, DiscoveryClient discoveryClient) {
         this.swaggerUiConfigProperties = swaggerUiConfigProperties;
         this.discoveryClient = discoveryClient;
     }
 
-    /**
-     * 事件回调方法，处理InstancesChangeEvent事件
-     * @param event 事件对象
-     */
     @Override
-    public void onEvent(InstancesChangeEvent event)
-    {
-        Set<AbstractSwaggerUiConfigProperties.SwaggerUrl> swaggerUrlSet = discoveryClient.getServices()
-            .stream()
-            .flatMap(serviceId -> discoveryClient.getInstances(serviceId).stream())
-            .filter(instance -> !StringUtils.equalsAnyIgnoreCase(instance.getServiceId(), EXCLUDE_ROUTES))
-            .map(instance -> {
-                AbstractSwaggerUiConfigProperties.SwaggerUrl swaggerUrl = new AbstractSwaggerUiConfigProperties.SwaggerUrl();
-                swaggerUrl.setName(instance.getServiceId());
-                swaggerUrl.setUrl(String.format("/%s/v3/api-docs", instance.getServiceId()));
-                return swaggerUrl;
-            })
-            .collect(Collectors.toSet());
+    public void onEvent(InstancesChangeEvent event) {
+        refresh();
+    }
 
+    void refresh() {
+        Set<AbstractSwaggerUiConfigProperties.SwaggerUrl> swaggerUrlSet = new LinkedHashSet<>();
+        for (String serviceId : discoveryClient.getServices()) {
+            if (StringUtils.equalsAnyIgnoreCase(serviceId, EXCLUDE_ROUTES)) {
+                continue;
+            }
+            if (discoveryClient.getInstances(serviceId).isEmpty()) {
+                continue;
+            }
+            AbstractSwaggerUiConfigProperties.SwaggerUrl swaggerUrl = new AbstractSwaggerUiConfigProperties.SwaggerUrl();
+            swaggerUrl.setName(serviceId);
+            // 业务服务固定用 spring.application.name 作为分组名
+            swaggerUrl.setUrl(String.format("/%s/v3/api-docs/%s", serviceId, serviceId));
+            swaggerUrlSet.add(swaggerUrl);
+        }
         swaggerUiConfigProperties.setUrls(swaggerUrlSet);
     }
 
-    /**
-     * 订阅类型方法，返回订阅的事件类型
-     * @return 订阅的事件类型
-     */
     @Override
-    public Class<? extends Event> subscribeType()
-    {
+    public Class<? extends Event> subscribeType() {
         return InstancesChangeEvent.class;
     }
 }

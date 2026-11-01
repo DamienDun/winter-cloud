@@ -12,8 +12,16 @@ import io.swagger.v3.oas.models.info.License;
  */
 @ConfigurationProperties(prefix = "swagger")
 public class WinterSwaggerProperties {
+
     /**
-     * 网关
+     * 是否开启接口文档。关闭后不注册 OpenAPI，网关也聚合不到该服务。
+     */
+    private boolean enabled = true;
+
+    /**
+     * 网关对外地址，需要带上该服务的路由前缀。
+     * 例如 http://127.0.0.1:8080/winter-system。
+     * 留空时按当前请求地址生成，适合直连服务调试。
      */
     private String gatewayUrl;
 
@@ -99,6 +107,14 @@ public class WinterSwaggerProperties {
         public void setVersion(String version) {
             this.version = version;
         }
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     public String getGatewayUrl() {

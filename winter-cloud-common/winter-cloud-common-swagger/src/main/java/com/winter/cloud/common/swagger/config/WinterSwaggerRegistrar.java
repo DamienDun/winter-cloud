@@ -11,6 +11,7 @@ import com.winter.cloud.common.swagger.models.WinterSwaggerApiInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springdoc.core.GroupedOpenApi;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
@@ -65,7 +66,10 @@ public class WinterSwaggerRegistrar implements ImportBeanDefinitionRegistrar, Re
     @SuppressWarnings("unchecked")
     @Override
     public void registerBeanDefinitions(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
-
+        if (!isSwaggerEnabled()) {
+            log.info("swagger.enabled=false，跳过 WinterSwagger 文档注册");
+            return;
+        }
         AnnotationAttributes annoAttrs = AnnotationAttributes.fromMap(metadata.getAnnotationAttributes(EnableWinterSwagger.class.getName()));
         if (annoAttrs == null) {
             return;
@@ -75,21 +79,32 @@ public class WinterSwaggerRegistrar implements ImportBeanDefinitionRegistrar, Re
         GenericBeanDefinition beanDefinition = regManager.createBeanDefinition(WinterSwaggerApiInfo.class, propertyValues, null, null);
         regManager.registerBean(null, beanDefinition);
         log.info("开始注册 WinterSwagger 文档...");
+        String serviceName = this.environment == null ? null : this.environment.getProperty("spring.application.name");
         List<WinterSwaggerApiGroupInfo> groupInfos = (List<WinterSwaggerApiGroupInfo>) propertyValues.get(EnableWinterSwagger.FIELD_GROUPS);
         for (WinterSwaggerApiGroupInfo group : groupInfos) {
+            if (serviceName != null && serviceName.equals(group.getGroupName())) {
+                // 服务级文档已经占用 spring.application.name，同名业务分组会让 SpringDoc 启动失败
+                log.warn("业务分组[{}]与服务名相同，已跳过。请换一个分组名", group.getGroupName());
+                continue;
+            }
             log.info("注册 WinterSwagger 文档组[{}]", group.getGroupName());
-            BeanDefinitionBuilder beanDefinitionBuilder = BeanDefinitionBuilder.genericBeanDefinition(GroupedOpenApi.class,
-                    // Lambda表达式：调用Builder模式创建对象
-                    () -> GroupedOpenApi.builder()
-                            .group(group.getGroupName())
-                            .packagesToScan(group.getPackages().toArray(new String[group.getPackages().size()]))
-                            .build()
-            );
+            GroupedOpenApi groupedOpenApi = WinterSwaggerGroupFactory.create(group);
+            BeanDefinitionBuilder beanDefinitionBuilder = BeanDefinitionBuilder.genericBeanDefinition(GroupedOpenApi.class, () -> groupedOpenApi);
             beanDefinitionBuilder.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
             beanDefinitionBuilder.setLazyInit(true);
             registry.registerBeanDefinition(group.getBeanId(), beanDefinitionBuilder.getRawBeanDefinition());
         }
         log.info("Register WinterSwagger [{}]", groupInfos.stream().map(WinterSwaggerApiGroupInfo::getGroupName).collect(Collectors.joining("、")));
+    }
+
+    /**
+     * 与自动配置上的 swagger.enabled 使用同一套宽松绑定。
+     */
+    private boolean isSwaggerEnabled() {
+        if (this.environment == null) {
+            return true;
+        }
+        return Binder.get(this.environment).bind("swagger.enabled", Boolean.class).orElse(Boolean.TRUE);
     }
 
     /**
