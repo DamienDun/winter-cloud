@@ -314,6 +314,27 @@
                 <version>${winter.version}</version>
             </dependency>
 
+            <!-- 钉钉 -->
+            <dependency>
+                <groupId>com.winter</groupId>
+                <artifactId>winter-cloud-dingtalk</artifactId>
+                <version>${winter.version}</version>
+            </dependency>
+
+            <!-- 钉钉旧版 SDK -->
+            <dependency>
+                <groupId>com.aliyun</groupId>
+                <artifactId>alibaba-dingtalk-service-sdk</artifactId>
+                <version>${dingtalk.old.version}</version>
+            </dependency>
+
+            <!-- 钉钉新版 SDK -->
+            <dependency>
+                <groupId>com.aliyun</groupId>
+                <artifactId>dingtalk</artifactId>
+                <version>${dingtalk.new.version}</version>
+            </dependency>
+
             <!-- 系统接口 -->
             <dependency>
                 <groupId>com.winter</groupId>

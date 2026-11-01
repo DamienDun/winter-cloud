@@ -19,6 +19,7 @@
         <module>winter-cloud-common-datascope</module>
         <module>winter-cloud-common-datasource</module>
         <module>winter-cloud-file-storage</module>
+        <module>winter-cloud-dingtalk</module>
     </modules>
 
     <artifactId>winter-cloud-common</artifactId>
