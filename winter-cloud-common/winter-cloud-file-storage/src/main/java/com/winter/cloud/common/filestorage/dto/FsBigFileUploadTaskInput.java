@@ -43,6 +43,12 @@ public class FsBigFileUploadTaskInput implements PrimaryKey<Long> {
     private String uploadId;
 
     /**
+     * 存储通道 ID
+     */
+    @Schema(description = "存储通道ID")
+    private String channelId;
+
+    /**
      * 文件的Md5值
      */
     @Schema(description = "文件的Md5值")

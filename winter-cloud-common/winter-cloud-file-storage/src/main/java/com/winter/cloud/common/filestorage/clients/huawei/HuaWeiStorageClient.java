@@ -6,14 +6,21 @@ import com.winter.cloud.common.core.utils.ExceptionUtil;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.core.utils.tuple.TupleTwo;
 import com.winter.cloud.common.filestorage.*;
+import com.winter.cloud.common.filestorage.multipart.MultipartListedPart;
+import com.winter.cloud.common.filestorage.multipart.MultipartPartETag;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadOptions;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadSupport;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.DisposableBean;
 
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 华为云 OBS
@@ -24,7 +31,7 @@ import java.util.List;
  * @description
  * @create 2022/8/17 14:20
  */
-public class HuaWeiStorageClient extends AbstractCloudStorageClient<HuaWeiBucket> implements Closeable, DisposableBean {
+public class HuaWeiStorageClient extends AbstractCloudStorageClient<HuaWeiBucket> implements Closeable, DisposableBean, MultipartUploadSupport {
 
     /**
      * 存储代码
@@ -216,6 +223,64 @@ public class HuaWeiStorageClient extends AbstractCloudStorageClient<HuaWeiBucket
         return "启用 FileStorage " + this.getChannelName()
                 + " 默认分区:" + this.getDefaultBucketName()
                 + " 访问根路径:" + this.getEndpoint();
+    }
+
+    @Override
+    public MultipartUploadOptions initiateMultipartUpload(String bucketName, String objectName,
+                                                          long objectSize, long partSize, String contentType) {
+        if (!this.existBucket(bucketName)) {
+            this.createBucket(bucketName);
+        }
+        InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(bucketName, objectName);
+        if (StringUtils.isNotEmpty(contentType)) {
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentType(contentType);
+            request.setMetadata(metadata);
+        }
+        InitiateMultipartUploadResult result = this.obsClient.initiateMultipartUpload(request);
+        return new MultipartUploadOptions(CHANNEL_ID, bucketName, objectName, result.getUploadId(),
+                objectSize, partSize, contentType, null);
+    }
+
+    @Override
+    public MultipartPartETag uploadPart(MultipartUploadOptions options, byte[] data, int partNumber, int availableSize) {
+        UploadPartRequest request = new UploadPartRequest(options.getBucketName(), options.getObjectName());
+        request.setUploadId(options.getUploadId());
+        request.setPartNumber(partNumber);
+        request.setInput(new ByteArrayInputStream(data, 0, availableSize));
+        request.setPartSize((long) availableSize);
+        UploadPartResult result = this.obsClient.uploadPart(request);
+        return new MultipartPartETag(partNumber, result.getEtag());
+    }
+
+    @Override
+    public List<MultipartListedPart> listMultipartParts(String bucketName, String objectName, String uploadId) {
+        ListPartsRequest request = new ListPartsRequest(bucketName, objectName, uploadId);
+        ListPartsResult result = this.obsClient.listParts(request);
+        List<MultipartListedPart> parts = new ArrayList<>();
+        if (result.getMultipartList() != null) {
+            for (Multipart multipart : result.getMultipartList()) {
+                parts.add(new MultipartListedPart(multipart.getPartNumber(), multipart.getEtag(), multipart.getSize()));
+            }
+        }
+        return parts;
+    }
+
+    @Override
+    public void completeMultipartUpload(String bucketName, String objectName, String uploadId,
+                                        List<MultipartPartETag> parts) {
+        // 华为 OBS PartEtag 构造参数顺序为 (etag, partNumber)
+        List<PartEtag> partETags = parts.stream()
+                .sorted(Comparator.comparingInt(MultipartPartETag::getPartNumber))
+                .map(part -> new PartEtag(part.getEtag(), part.getPartNumber()))
+                .collect(Collectors.toList());
+        CompleteMultipartUploadRequest request = new CompleteMultipartUploadRequest(bucketName, objectName, uploadId, partETags);
+        this.obsClient.completeMultipartUpload(request);
+    }
+
+    @Override
+    public void abortMultipartUpload(String bucketName, String objectName, String uploadId) {
+        this.obsClient.abortMultipartUpload(new AbortMultipartUploadRequest(bucketName, objectName, uploadId));
     }
 
     @Override

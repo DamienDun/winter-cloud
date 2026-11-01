@@ -8,12 +8,19 @@ import com.aliyun.oss.model.*;
 import com.winter.cloud.common.core.utils.ExceptionUtil;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.filestorage.*;
+import com.winter.cloud.common.filestorage.multipart.MultipartListedPart;
+import com.winter.cloud.common.filestorage.multipart.MultipartPartETag;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadOptions;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadSupport;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.DisposableBean;
 
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 阿里云存储客户端
@@ -24,7 +31,7 @@ import java.util.List;
  * @description
  * @create 2022/8/17 14:14
  */
-public class AliyunStorageClient extends AbstractCloudStorageClient<AliyunBucket> implements Closeable, DisposableBean {
+public class AliyunStorageClient extends AbstractCloudStorageClient<AliyunBucket> implements Closeable, DisposableBean, MultipartUploadSupport {
 
     /**
      * 存储代码
@@ -254,6 +261,62 @@ public class AliyunStorageClient extends AbstractCloudStorageClient<AliyunBucket
             }
         }
         return fileObjects;
+    }
+
+    @Override
+    public MultipartUploadOptions initiateMultipartUpload(String bucketName, String objectName,
+                                                          long objectSize, long partSize, String contentType) {
+        if (!this.existBucket(bucketName)) {
+            this.createBucket(bucketName);
+        }
+        ObjectMetadata metadata = new ObjectMetadata();
+        if (StringUtils.isNotEmpty(contentType)) {
+            metadata.setContentType(contentType);
+        }
+        InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(bucketName, objectName, metadata);
+        InitiateMultipartUploadResult result = this.oss.initiateMultipartUpload(request);
+        return new MultipartUploadOptions(CHANNEL_ID, bucketName, objectName, result.getUploadId(),
+                objectSize, partSize, contentType, null);
+    }
+
+    @Override
+    public MultipartPartETag uploadPart(MultipartUploadOptions options, byte[] data, int partNumber, int availableSize) {
+        UploadPartRequest request = new UploadPartRequest();
+        request.setBucketName(options.getBucketName());
+        request.setKey(options.getObjectName());
+        request.setUploadId(options.getUploadId());
+        request.setPartNumber(partNumber);
+        request.setInputStream(new ByteArrayInputStream(data, 0, availableSize));
+        request.setPartSize(availableSize);
+        UploadPartResult result = this.oss.uploadPart(request);
+        return new MultipartPartETag(partNumber, result.getETag());
+    }
+
+    @Override
+    public List<MultipartListedPart> listMultipartParts(String bucketName, String objectName, String uploadId) {
+        PartListing listing = this.oss.listParts(new ListPartsRequest(bucketName, objectName, uploadId));
+        List<MultipartListedPart> parts = new ArrayList<>();
+        if (listing.getParts() != null) {
+            for (PartSummary summary : listing.getParts()) {
+                parts.add(new MultipartListedPart(summary.getPartNumber(), summary.getETag(), summary.getSize()));
+            }
+        }
+        return parts;
+    }
+
+    @Override
+    public void completeMultipartUpload(String bucketName, String objectName, String uploadId,
+                                        List<MultipartPartETag> parts) {
+        List<PartETag> partETags = parts.stream()
+                .sorted(Comparator.comparingInt(MultipartPartETag::getPartNumber))
+                .map(part -> new PartETag(part.getPartNumber(), part.getEtag()))
+                .collect(Collectors.toList());
+        this.oss.completeMultipartUpload(new CompleteMultipartUploadRequest(bucketName, objectName, uploadId, partETags));
+    }
+
+    @Override
+    public void abortMultipartUpload(String bucketName, String objectName, String uploadId) {
+        this.oss.abortMultipartUpload(new AbortMultipartUploadRequest(bucketName, objectName, uploadId));
     }
 
     @Override

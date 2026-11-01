@@ -73,6 +73,12 @@ public class WinterStorageProperties implements Serializable {
     private int uploadBigFileCount = 10000;
 
     /**
+     * 大文件分片使用的存储通道（Minio / Aws / aliyunOOS / HuaWeiOBS / TencentCOS）。
+     * 与普通上传一致：由配置指定；也可在申请接口传入 channelId 覆盖。
+     */
+    private String multipartChannel;
+
+    /**
      *
      */
     public WinterStorageProperties() {

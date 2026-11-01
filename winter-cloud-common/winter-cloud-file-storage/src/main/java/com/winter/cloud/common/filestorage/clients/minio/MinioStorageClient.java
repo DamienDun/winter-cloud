@@ -6,6 +6,10 @@ import com.winter.cloud.common.core.utils.ExceptionUtil;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.core.utils.tuple.TupleTwo;
 import com.winter.cloud.common.filestorage.*;
+import com.winter.cloud.common.filestorage.multipart.MultipartListedPart;
+import com.winter.cloud.common.filestorage.multipart.MultipartPartETag;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadOptions;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadSupport;
 import io.minio.ErrorCode;
 import io.minio.ObjectStat;
 import io.minio.PutObjectOptions;
@@ -14,6 +18,8 @@ import io.minio.errors.ErrorResponseException;
 import io.minio.errors.InvalidEndpointException;
 import io.minio.errors.InvalidPortException;
 import io.minio.messages.Item;
+import io.minio.messages.ListPartsResult;
+import io.minio.messages.Part;
 import org.apache.commons.io.IOUtils;
 
 import java.io.ByteArrayInputStream;
@@ -23,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Minio 存储客户端
@@ -33,7 +40,7 @@ import java.util.Map;
  * @description
  * @create 2022/8/17 13:21
  */
-public class MinioStorageClient extends AbstractStorageClient<MinioBucket> {
+public class MinioStorageClient extends AbstractStorageClient<MinioBucket> implements MultipartUploadSupport {
 
     /**
      * 存储代码
@@ -318,6 +325,50 @@ public class MinioStorageClient extends AbstractStorageClient<MinioBucket> {
      */
     public String getSecretKey() {
         return this.secretKey;
+    }
+
+    @Override
+    public MultipartUploadOptions initiateMultipartUpload(String bucketName, String objectName,
+                                                          long objectSize, long partSize, String contentType) throws Exception {
+        MinioObjectOptions objectOptions = new MinioObjectOptions(objectSize, partSize);
+        objectOptions.setContentType(contentType);
+        MinioMultiPartUploadOptions options = this.minioClient.createMultipartUploadOptions(bucketName, objectName, objectOptions);
+        return new MultipartUploadOptions(CHANNEL_ID, options.getBucketName(), options.getObjectName(), options.getUploadId(),
+                options.getObjectSize(), options.getPartSize(), contentType, options.getSsecHeaders());
+    }
+
+    @Override
+    public MultipartPartETag uploadPart(MultipartUploadOptions options, byte[] data, int partNumber, int availableSize) throws Exception {
+        MinioMultiPartUploadOptions minioOptions = new MinioMultiPartUploadOptions(
+                options.getBucketName(), options.getObjectName(), options.getUploadId(),
+                options.getObjectSize(), options.getPartSize(), options.getHeaders());
+        PartUploadTag tag = this.minioClient.multiPartUpload(minioOptions, data, partNumber, availableSize);
+        return new MultipartPartETag(tag.getPartNumber(), tag.getEtag());
+    }
+
+    @Override
+    public List<MultipartListedPart> listMultipartParts(String bucketName, String objectName, String uploadId) throws Exception {
+        ListPartsResult result = this.minioClient.listParts(bucketName, objectName, null, null, uploadId);
+        if (result == null || result.partList() == null) {
+            return new ArrayList<>();
+        }
+        return result.partList().stream()
+                .map(part -> new MultipartListedPart(part.partNumber(), part.etag(), part.partSize()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void completeMultipartUpload(String bucketName, String objectName, String uploadId,
+                                        List<MultipartPartETag> parts) throws Exception {
+        List<Part> minioParts = parts.stream()
+                .map(part -> new Part(part.getPartNumber(), part.getEtag()))
+                .collect(Collectors.toList());
+        this.minioClient.completeMultipartUpload(bucketName, objectName, uploadId, minioParts);
+    }
+
+    @Override
+    public void abortMultipartUpload(String bucketName, String objectName, String uploadId) throws Exception {
+        this.minioClient.abortMultipartUpload(bucketName, objectName, uploadId);
     }
 
     @Override

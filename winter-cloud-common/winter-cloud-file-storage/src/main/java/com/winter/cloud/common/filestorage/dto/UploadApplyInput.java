@@ -1,8 +1,8 @@
 package com.winter.cloud.common.filestorage.dto;
 
-import com.winter.cloud.common.filestorage.support.validation.NotNullOrBlank;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadConstants;
 import com.winter.cloud.common.filestorage.support.validation.DefaultDataValidation;
-import io.minio.PutObjectOptions;
+import com.winter.cloud.common.filestorage.support.validation.NotNullOrBlank;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -33,7 +33,7 @@ public class UploadApplyInput extends DefaultDataValidation {
      */
     @Schema(description = "文件总大小", required = true)
     @Min(value = 1L, message = "文件总大小不能小于或等于零。")
-    @Max(value = PutObjectOptions.MAX_OBJECT_SIZE, message = "文件总大小不能超过5TiB。")
+    @Max(value = MultipartUploadConstants.MAX_OBJECT_SIZE, message = "文件总大小不能超过5TiB。")
     private long totalBytes;
 
     /**
@@ -54,7 +54,7 @@ public class UploadApplyInput extends DefaultDataValidation {
      * 分片字节数
      */
     @Schema(description = "分片字节数(不传系统则默认10M)")
-    @Max(value = PutObjectOptions.MAX_PART_SIZE, message = "文件总大小不能超过5GiB。")
+    @Max(value = MultipartUploadConstants.MAX_PART_SIZE, message = "分片大小不能超过5GiB。")
     private Long partBytes;
 
     /**
@@ -65,4 +65,10 @@ public class UploadApplyInput extends DefaultDataValidation {
 
     @Schema(description = "要上传的桶,不传则使用默认")
     private String bucketName;
+
+    /**
+     * 存储通道：Minio / Aws / aliyunOOS / HuaWeiOBS / TencentCOS；为空则使用配置 multipart-channel
+     */
+    @Schema(description = "存储通道ID，为空则使用 winter.storage.client.multipart-channel")
+    private String channelId;
 }

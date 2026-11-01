@@ -18,9 +18,9 @@ import com.winter.cloud.common.filestorage.clients.aws.AwsStorageClient;
 import com.winter.cloud.common.filestorage.clients.aws.AwsStorageClientProperties;
 import com.winter.cloud.common.filestorage.impl.StorageClientContextImpl;
 import com.winter.cloud.common.filestorage.properties.WinterStorageProperties;
-import com.winter.cloud.common.filestorage.service.BigFileUploadMinioService;
+import com.winter.cloud.common.filestorage.service.BigFileUploadService;
 import com.winter.cloud.common.filestorage.service.FsBigFileUploadTaskService;
-import com.winter.cloud.common.filestorage.service.impl.BigFileUploadMinioServiceImpl;
+import com.winter.cloud.common.filestorage.service.impl.BigFileUploadServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -151,13 +151,18 @@ public class WinterStorageAutoConfiguration {
         return new AwsStorageClient(properties.getAws());
     }
 
+    /**
+     * 大文件分片上传（通道由配置/入参选择，与普通上传一致）
+     */
     @Bean
-    @ConditionalOnProperty(name = MinioStorageClientProperties.BEAN_CONDITIONAL_PROPERTY, havingValue = "true")
-    @ConditionalOnBean({StorageClient.class, DistributionLockCli.class, ProxyCacheManager.class, FsBigFileUploadTaskService.class})
-    @ConditionalOnMissingBean(BigFileUploadMinioService.class)
-    public BigFileUploadMinioService bigFileUploadMinioService(WinterStorageProperties properties, DistributionLockCli distributionLockCli,
-                                                               ProxyCacheManager proxyCacheManager, FsBigFileUploadTaskService fsBigFileUploadTaskService) {
-        return new BigFileUploadMinioServiceImpl((MinioStorageClient) minioStorageClient(properties), distributionLockCli,
+    @ConditionalOnBean({StorageClientContext.class, DistributionLockCli.class, ProxyCacheManager.class, FsBigFileUploadTaskService.class})
+    @ConditionalOnMissingBean(BigFileUploadService.class)
+    public BigFileUploadService bigFileUploadService(StorageClientContext storageClientContext,
+                                                     DistributionLockCli distributionLockCli,
+                                                     ProxyCacheManager proxyCacheManager,
+                                                     FsBigFileUploadTaskService fsBigFileUploadTaskService,
+                                                     WinterStorageProperties properties) {
+        return new BigFileUploadServiceImpl(storageClientContext, distributionLockCli,
                 proxyCacheManager, fsBigFileUploadTaskService, properties);
     }
 

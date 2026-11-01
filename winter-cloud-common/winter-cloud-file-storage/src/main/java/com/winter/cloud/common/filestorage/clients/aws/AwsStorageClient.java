@@ -11,13 +11,20 @@ import com.winter.cloud.common.core.utils.ExceptionUtil;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.core.utils.tuple.TupleTwo;
 import com.winter.cloud.common.filestorage.*;
+import com.winter.cloud.common.filestorage.multipart.MultipartListedPart;
+import com.winter.cloud.common.filestorage.multipart.MultipartPartETag;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadOptions;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadSupport;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.DisposableBean;
 
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * AWS S3 对象存储客户端
@@ -29,7 +36,7 @@ import java.util.List;
  * @description
  * @create 2026/7/27
  */
-public class AwsStorageClient extends AbstractStorageClient<AwsBucket> implements Closeable, DisposableBean {
+public class AwsStorageClient extends AbstractStorageClient<AwsBucket> implements Closeable, DisposableBean, MultipartUploadSupport {
 
     /**
      * 存储代码
@@ -314,6 +321,62 @@ public class AwsStorageClient extends AbstractStorageClient<AwsBucket> implement
                 + " 访问根路径:" + this.getEndpoint()
                 + " 服务器地址:" + this.getServerUrl()
                 + " 区域:" + this.getRegion();
+    }
+
+    @Override
+    public MultipartUploadOptions initiateMultipartUpload(String bucketName, String objectName,
+                                                          long objectSize, long partSize, String contentType) {
+        if (!this.existBucket(bucketName)) {
+            this.createBucket(bucketName);
+        }
+        ObjectMetadata metadata = new ObjectMetadata();
+        if (StringUtils.isNotEmpty(contentType)) {
+            metadata.setContentType(contentType);
+        }
+        InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(bucketName, objectName, metadata);
+        InitiateMultipartUploadResult result = this.amazonS3.initiateMultipartUpload(request);
+        return new MultipartUploadOptions(CHANNEL_ID, bucketName, objectName, result.getUploadId(),
+                objectSize, partSize, contentType, null);
+    }
+
+    @Override
+    public MultipartPartETag uploadPart(MultipartUploadOptions options, byte[] data, int partNumber, int availableSize) {
+        UploadPartRequest request = new UploadPartRequest()
+                .withBucketName(options.getBucketName())
+                .withKey(options.getObjectName())
+                .withUploadId(options.getUploadId())
+                .withPartNumber(partNumber)
+                .withInputStream(new ByteArrayInputStream(data, 0, availableSize))
+                .withPartSize(availableSize);
+        UploadPartResult result = this.amazonS3.uploadPart(request);
+        return new MultipartPartETag(partNumber, result.getETag());
+    }
+
+    @Override
+    public List<MultipartListedPart> listMultipartParts(String bucketName, String objectName, String uploadId) {
+        PartListing listing = this.amazonS3.listParts(new ListPartsRequest(bucketName, objectName, uploadId));
+        List<MultipartListedPart> parts = new ArrayList<>();
+        if (listing.getParts() != null) {
+            for (PartSummary summary : listing.getParts()) {
+                parts.add(new MultipartListedPart(summary.getPartNumber(), summary.getETag(), summary.getSize()));
+            }
+        }
+        return parts;
+    }
+
+    @Override
+    public void completeMultipartUpload(String bucketName, String objectName, String uploadId,
+                                        List<MultipartPartETag> parts) {
+        List<PartETag> partETags = parts.stream()
+                .sorted(Comparator.comparingInt(MultipartPartETag::getPartNumber))
+                .map(part -> new PartETag(part.getPartNumber(), part.getEtag()))
+                .collect(Collectors.toList());
+        this.amazonS3.completeMultipartUpload(new CompleteMultipartUploadRequest(bucketName, objectName, uploadId, partETags));
+    }
+
+    @Override
+    public void abortMultipartUpload(String bucketName, String objectName, String uploadId) {
+        this.amazonS3.abortMultipartUpload(new AbortMultipartUploadRequest(bucketName, objectName, uploadId));
     }
 
     @Override

@@ -9,11 +9,18 @@ import com.winter.cloud.common.core.utils.ExceptionUtil;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.core.utils.tuple.TupleTwo;
 import com.winter.cloud.common.filestorage.*;
+import com.winter.cloud.common.filestorage.multipart.MultipartListedPart;
+import com.winter.cloud.common.filestorage.multipart.MultipartPartETag;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadOptions;
+import com.winter.cloud.common.filestorage.multipart.MultipartUploadSupport;
 import org.apache.commons.io.IOUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 腾讯云 cos
@@ -24,7 +31,7 @@ import java.util.List;
  * @description
  * @create 2022/8/17 14:26
  */
-public class TencentStorageClient extends AbstractCloudStorageClient<TencentBucket> {
+public class TencentStorageClient extends AbstractCloudStorageClient<TencentBucket> implements MultipartUploadSupport {
 
     /**
      * 存储代码
@@ -198,6 +205,63 @@ public class TencentStorageClient extends AbstractCloudStorageClient<TencentBuck
             fileObjects.add(fileObject);
         }
         return fileObjects;
+    }
+
+    @Override
+    public MultipartUploadOptions initiateMultipartUpload(String bucketName, String objectName,
+                                                          long objectSize, long partSize, String contentType) {
+        if (!this.existBucket(bucketName)) {
+            this.createBucket(bucketName);
+        }
+        InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(bucketName, objectName);
+        if (StringUtils.isNotEmpty(contentType)) {
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentType(contentType);
+            request.setObjectMetadata(metadata);
+        }
+        InitiateMultipartUploadResult result = this.cosClient.initiateMultipartUpload(request);
+        return new MultipartUploadOptions(CHANNEL_ID, bucketName, objectName, result.getUploadId(),
+                objectSize, partSize, contentType, null);
+    }
+
+    @Override
+    public MultipartPartETag uploadPart(MultipartUploadOptions options, byte[] data, int partNumber, int availableSize) {
+        UploadPartRequest request = new UploadPartRequest()
+                .withBucketName(options.getBucketName())
+                .withKey(options.getObjectName())
+                .withUploadId(options.getUploadId())
+                .withPartNumber(partNumber)
+                .withInputStream(new ByteArrayInputStream(data, 0, availableSize))
+                .withPartSize(availableSize);
+        UploadPartResult result = this.cosClient.uploadPart(request);
+        return new MultipartPartETag(partNumber, result.getETag());
+    }
+
+    @Override
+    public List<MultipartListedPart> listMultipartParts(String bucketName, String objectName, String uploadId) {
+        PartListing listing = this.cosClient.listParts(new ListPartsRequest(bucketName, objectName, uploadId));
+        List<MultipartListedPart> parts = new ArrayList<>();
+        if (listing.getParts() != null) {
+            for (PartSummary summary : listing.getParts()) {
+                parts.add(new MultipartListedPart(summary.getPartNumber(), summary.getETag(), summary.getSize()));
+            }
+        }
+        return parts;
+    }
+
+    @Override
+    public void completeMultipartUpload(String bucketName, String objectName, String uploadId,
+                                        List<MultipartPartETag> parts) {
+        List<PartETag> partETags = parts.stream()
+                .sorted(Comparator.comparingInt(MultipartPartETag::getPartNumber))
+                .map(part -> new PartETag(part.getPartNumber(), part.getEtag()))
+                .collect(Collectors.toList());
+        this.cosClient.completeMultipartUpload(new CompleteMultipartUploadRequest(bucketName, objectName, uploadId, partETags));
+    }
+
+    @Override
+    public void abortMultipartUpload(String bucketName, String objectName, String uploadId) {
+        this.cosClient.abortMultipartUpload(new AbortMultipartUploadRequest(bucketName, objectName, uploadId));
     }
 
     @Override

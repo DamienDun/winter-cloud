@@ -27,6 +27,11 @@ public class FsBigFileUploadTask extends StorageBaseEntity {
     private String uploadId;
 
     /**
+     * 存储通道 ID
+     */
+    private String channelId;
+
+    /**
      * 文件的Md5值
      */
     private String fileMd5;
