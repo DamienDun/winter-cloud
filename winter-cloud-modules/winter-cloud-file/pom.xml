@@ -66,6 +66,12 @@
             <artifactId>winter-cloud-api-system</artifactId>
         </dependency>
 
+        <!-- Winter Common Swagger -->
+        <dependency>
+            <groupId>com.winter</groupId>
+            <artifactId>winter-cloud-common-swagger</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
