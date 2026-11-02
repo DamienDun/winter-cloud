@@ -42,14 +42,25 @@
 </template>
 
 <script>
+/** 与 MimeTypeUtils.DEFAULT_ALLOWED_EXTENSION 保持一致 */
+const DEFAULT_FILE_TYPES = [
+  'bmp', 'gif', 'jpg', 'jpeg', 'png', 'webp', 'svg', 'tif', 'tiff', 'ico', 'heic', 'heif', 'apng', 'dib',
+  'doc', 'docx', 'xls', 'xlsx', 'xlsm', 'ppt', 'pptx', 'pdf', 'rtf', 'odt', 'ods', 'odp', 'wps', 'et', 'dps', 'ofd',
+  'txt', 'md', 'markdown', 'csv', 'html', 'htm', 'xml', 'json', 'yml', 'yaml', 'log', 'ini', 'conf', 'properties', 'sql',
+  'rar', 'zip', '7z', 'gz', 'bz2', 'tar', 'xz', 'tgz',
+  'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'mid', 'midi', 'opus', 'amr',
+  'mp4', 'avi', 'rmvb', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'mpeg', 'mpg', '3gp', 'ts',
+  'psd', 'ai', 'eps', 'sketch', 'fig'
+]
+
 export default {
   name: 'FileUploadPage',
   data() {
     return {
       fileUrls: '',
       imageUrls: '',
-      fileType: ['bmp', 'gif', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'html', 'htm', 'txt', 'rar', 'zip', 'gz', 'bz2', 'mp4', 'avi', 'rmvb', 'pdf'],
-      imageType: ['bmp', 'gif', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dib', 'webp', 'svg']
+      fileType: DEFAULT_FILE_TYPES,
+      imageType: ['bmp', 'gif', 'jpg', 'jpeg', 'png', 'webp', 'svg', 'tif', 'tiff', 'ico', 'heic', 'heif', 'apng', 'dib']
     }
   },
   computed: {

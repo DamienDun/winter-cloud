@@ -57,8 +57,15 @@
           <span>{{ parseTime(scope.row.gmtCreate) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="140" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="200" class-name="small-padding fixed-width">
         <template slot-scope="scope">
+          <el-button
+            size="mini"
+            type="text"
+            icon="el-icon-zoom-in"
+            :disabled="!scope.row.path"
+            @click="handlePreview(scope.row)"
+          >预览</el-button>
           <el-button size="mini" type="text" icon="el-icon-view" @click="handleView(scope.row)">详情</el-button>
           <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)">删除</el-button>
         </template>
@@ -93,17 +100,22 @@
         <el-descriptions-item label="更新时间">{{ parseTime(form.gmtModified) }}</el-descriptions-item>
       </el-descriptions>
       <div slot="footer" class="dialog-footer">
+        <el-button v-if="form && form.path" type="primary" plain icon="el-icon-zoom-in" @click="handlePreview(form)">预 览</el-button>
         <el-button @click="open = false">关 闭</el-button>
       </div>
     </el-dialog>
+
+    <file-preview ref="filePreview" />
   </div>
 </template>
 
 <script>
 import { listResourceFile, getResourceFile, delResourceFile } from '@/api/file/resource'
+import FilePreview from '@/components/FilePreview'
 
 export default {
   name: 'ResourceFileList',
+  components: { FilePreview },
   data() {
     return {
       loading: true,
@@ -181,6 +193,16 @@ export default {
       getResourceFile(row.id).then(res => {
         this.form = res.data
         this.open = true
+      })
+    },
+    handlePreview(row) {
+      if (!row || !row.path) {
+        this.$modal.msgWarning('暂无访问地址，无法预览')
+        return
+      }
+      this.$refs.filePreview.open(row.path, {
+        fileType: row.fileType,
+        fileName: row.originName
       })
     },
     handleDelete(row) {

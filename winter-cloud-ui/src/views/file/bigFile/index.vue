@@ -69,8 +69,15 @@
           <span>{{ parseTime(scope.row.createTime) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="140" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="200" class-name="small-padding fixed-width">
         <template slot-scope="scope">
+          <el-button
+            size="mini"
+            type="text"
+            icon="el-icon-zoom-in"
+            :disabled="!canPreview(scope.row)"
+            @click="handlePreview(scope.row)"
+          >预览</el-button>
           <el-button size="mini" type="text" icon="el-icon-view" @click="handleView(scope.row)">详情</el-button>
           <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)">删除</el-button>
         </template>
@@ -109,17 +116,22 @@
         <el-descriptions-item label="更新时间">{{ parseTime(form.updateTime) }}</el-descriptions-item>
       </el-descriptions>
       <div slot="footer" class="dialog-footer">
+        <el-button v-if="form && canPreview(form)" type="primary" plain icon="el-icon-zoom-in" @click="handlePreview(form)">预 览</el-button>
         <el-button @click="open = false">关 闭</el-button>
       </div>
     </el-dialog>
+
+    <file-preview ref="filePreview" />
   </div>
 </template>
 
 <script>
 import { listBigFileTask, getBigFileTask, delBigFileTask } from '@/api/file/bigFile'
+import FilePreview from '@/components/FilePreview'
 
 export default {
   name: 'BigFileTaskList',
+  components: { FilePreview },
   data() {
     return {
       loading: true,
@@ -199,11 +211,31 @@ export default {
     goUpload() {
       this.$router.push('/file/bigUpload')
     },
+    /** 仅上传完成且有访问地址才可预览 */
+    canPreview(row) {
+      return !!(row && row.accessPath && row.status === 3)
+    },
     handleView(row) {
       getBigFileTask(row.id).then(res => {
         this.form = res.data
         this.open = true
       })
+    },
+    handlePreview(row) {
+      if (!this.canPreview(row)) {
+        this.$modal.msgWarning('仅已完成上传的任务可预览')
+        return
+      }
+      this.$refs.filePreview.open(row.accessPath, {
+        fileType: row.fileType,
+        fileName: this.pickFileName(row)
+      })
+    },
+    pickFileName(row) {
+      if (!row) return ''
+      const path = row.filePath || row.accessPath || ''
+      const clean = path.split('?')[0]
+      return clean.substring(clean.lastIndexOf('/') + 1)
     },
     handleDelete(row) {
       const ids = row && row.id != null ? String(row.id) : this.ids.join(',')

@@ -17,26 +17,41 @@ public class MimeTypeUtils
 
     public static final String IMAGE_GIF = "image/gif";
 
-    public static final String[] IMAGE_EXTENSION = { "bmp", "gif", "jpg", "jpeg", "png" };
+    public static final String[] IMAGE_EXTENSION = {
+            "bmp", "gif", "jpg", "jpeg", "png", "webp", "svg", "tif", "tiff", "ico", "heic", "heif", "apng", "dib"
+    };
 
     public static final String[] FLASH_EXTENSION = { "swf", "flv" };
 
-    public static final String[] MEDIA_EXTENSION = { "swf", "flv", "mp3", "wav", "wma", "wmv", "mid", "avi", "mpg",
-            "asf", "rm", "rmvb" };
+    public static final String[] MEDIA_EXTENSION = {
+            "swf", "flv", "mp3", "wav", "wma", "wmv", "mid", "midi", "avi", "mpg", "mpeg",
+            "asf", "rm", "rmvb", "aac", "flac", "ogg", "m4a", "opus"
+    };
 
-    public static final String[] VIDEO_EXTENSION = { "mp4", "avi", "rmvb" };
+    public static final String[] VIDEO_EXTENSION = {
+            "mp4", "avi", "rmvb", "mkv", "mov", "wmv", "flv", "webm", "m4v", "mpeg", "mpg", "3gp", "ts"
+    };
 
+    /**
+     * 通用上传允许后缀（不含 exe/bat/sh/jsp 等可执行与服务端脚本）
+     */
     public static final String[] DEFAULT_ALLOWED_EXTENSION = {
             // 图片
-            "bmp", "gif", "jpg", "jpeg", "png",
-            // word excel powerpoint
-            "doc", "docx", "xls", "xlsx", "ppt", "pptx", "html", "htm", "txt",
-            // 压缩文件
-            "rar", "zip", "gz", "bz2",
-            // 视频格式
-            "mp4", "avi", "rmvb",
-            // pdf
-            "pdf" };
+            "bmp", "gif", "jpg", "jpeg", "png", "webp", "svg", "tif", "tiff", "ico", "heic", "heif", "apng", "dib",
+            // 办公文档
+            "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx", "pdf", "rtf", "odt", "ods", "odp",
+            "wps", "et", "dps", "ofd",
+            // 文本 / 网页 / 标记
+            "txt", "md", "markdown", "csv", "html", "htm", "xml", "json", "yml", "yaml", "log", "ini", "conf", "properties", "sql",
+            // 压缩包
+            "rar", "zip", "7z", "gz", "bz2", "tar", "xz", "tgz",
+            // 音频
+            "mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "mid", "midi", "opus", "amr",
+            // 视频
+            "mp4", "avi", "rmvb", "mkv", "mov", "wmv", "flv", "webm", "m4v", "mpeg", "mpg", "3gp", "ts",
+            // 设计 / 常用其它
+            "psd", "ai", "eps", "sketch", "fig"
+    };
 
     public static String getExtension(String prefix)
     {

@@ -22,7 +22,7 @@
       <div class="el-upload__tip" slot="tip" v-if="showTip">
         请上传
         <template v-if="fileSize"> 大小不超过 <b style="color: #f56c6c">{{ fileSize }}MB</b> </template>
-        <template v-if="fileType"> 格式为 <b style="color: #f56c6c">{{ fileType.join("/") }}</b> </template>
+        <template v-if="fileType"> 格式为 <b style="color: #f56c6c">{{ fileTypeTip }}</b> </template>
         的文件
       </div>
     </el-upload>
@@ -69,10 +69,18 @@ export default {
       type: Number,
       default: 5
     },
-    // 文件类型, 例如['png', 'jpg', 'jpeg']
+    // 文件类型，对齐 MimeTypeUtils.DEFAULT_ALLOWED_EXTENSION
     fileType: {
       type: Array,
-      default: () => ["bmp", "gif", "jpg", "jpeg", "png", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "html", "htm", "txt", "rar", "zip", "gz", "bz2", "mp4", "avi", "rmvb", "pdf"]
+      default: () => [
+        "bmp", "gif", "jpg", "jpeg", "png", "webp", "svg", "tif", "tiff", "ico", "heic", "heif", "apng", "dib",
+        "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx", "pdf", "rtf", "odt", "ods", "odp", "wps", "et", "dps", "ofd",
+        "txt", "md", "markdown", "csv", "html", "htm", "xml", "json", "yml", "yaml", "log", "ini", "conf", "properties", "sql",
+        "rar", "zip", "7z", "gz", "bz2", "tar", "xz", "tgz",
+        "mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "mid", "midi", "opus", "amr",
+        "mp4", "avi", "rmvb", "mkv", "mov", "wmv", "flv", "webm", "m4v", "mpeg", "mpg", "3gp", "ts",
+        "psd", "ai", "eps", "sketch", "fig"
+      ]
     },
     // 是否显示提示
     isShowTip: {
@@ -145,6 +153,16 @@ export default {
     showTip() {
       return this.isShowTip && (this.fileType || this.fileSize)
     },
+    // 类型过多时摘要展示，避免 tip 刷屏
+    fileTypeTip() {
+      if (!this.fileType || !this.fileType.length) {
+        return ''
+      }
+      if (this.fileType.length <= 12) {
+        return this.fileType.join('/')
+      }
+      return this.fileType.slice(0, 8).join('/') + ' 等' + this.fileType.length + '种常见格式'
+    }
   },
   methods: {
     // 上传前校检格式和大小
@@ -152,10 +170,10 @@ export default {
       // 校检文件类型
       if (this.fileType) {
         const fileName = file.name.split('.')
-        const fileExt = fileName[fileName.length - 1]
-        const isTypeOk = this.fileType.indexOf(fileExt) >= 0
+        const fileExt = (fileName[fileName.length - 1] || '').toLowerCase()
+        const isTypeOk = this.fileType.some(t => String(t).toLowerCase() === fileExt)
         if (!isTypeOk) {
-          this.$modal.msgError(`文件格式不正确，请上传${this.fileType.join("/")}格式文件!`)
+          this.$modal.msgError(`文件格式不正确，请上传${this.fileTypeTip}文件!`)
           return false
         }
       }

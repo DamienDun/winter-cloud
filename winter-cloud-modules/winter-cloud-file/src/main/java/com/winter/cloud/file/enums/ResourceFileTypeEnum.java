@@ -32,28 +32,28 @@ public enum ResourceFileTypeEnum {
             return OTHER.code;
         }
         String ext = extension.toLowerCase();
-        if (ext.matches("jpg|jpeg|png|gif|bmp|webp|svg")) {
+        if (ext.matches("jpg|jpeg|png|gif|bmp|webp|svg|tif|tiff|ico|heic|heif|apng|dib")) {
             return PIC.code;
         }
-        if (ext.matches("mp3|wav|flac|aac|ogg|m4a")) {
+        if (ext.matches("mp3|wav|flac|aac|ogg|m4a|wma|mid|midi|opus|amr")) {
             return AUDIO.code;
         }
-        if (ext.matches("mp4|avi|mkv|mov|wmv|flv|webm")) {
+        if (ext.matches("mp4|avi|mkv|mov|wmv|flv|webm|m4v|mpeg|mpg|3gp|ts|rmvb|rm")) {
             return VIDEO.code;
         }
-        if ("pdf".equals(ext)) {
+        if ("pdf".equals(ext) || "ofd".equals(ext)) {
             return PDF.code;
         }
-        if (ext.matches("doc|docx")) {
+        if (ext.matches("doc|docx|wps|odt|rtf")) {
             return DOC.code;
         }
-        if (ext.matches("xls|xlsx|csv")) {
+        if (ext.matches("xls|xlsx|xlsm|csv|et|ods")) {
             return EXCEL.code;
         }
-        if (ext.matches("ppt|pptx")) {
+        if (ext.matches("ppt|pptx|dps|odp")) {
             return PPT.code;
         }
-        if ("txt".equals(ext)) {
+        if (ext.matches("txt|md|markdown|log|ini|conf|properties|sql|json|xml|yml|yaml")) {
             return TXT.code;
         }
         if (ext.matches("html|htm")) {
