@@ -10,6 +10,8 @@ import com.winter.cloud.file.mapper.ResourceFileMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 /**
  * 资源文件上传记录服务
  */
@@ -20,6 +22,31 @@ public class ResourceFileServiceImpl implements IResourceFileService {
 
     public ResourceFileServiceImpl(ResourceFileMapper resourceFileMapper) {
         this.resourceFileMapper = resourceFileMapper;
+    }
+
+    @Override
+    public List<ResourceFile> selectResourceFileList(ResourceFile query) {
+        LambdaQueryWrapper<ResourceFile> wrapper = Wrappers.lambdaQuery(ResourceFile.class);
+        if (query != null) {
+            wrapper.like(StringUtils.isNotEmpty(query.getOriginName()), ResourceFile::getOriginName, query.getOriginName())
+                .eq(StringUtils.isNotEmpty(query.getFileMd5()), ResourceFile::getFileMd5, query.getFileMd5())
+                .eq(StringUtils.isNotEmpty(query.getChannelId()), ResourceFile::getChannelId, query.getChannelId())
+                .eq(StringUtils.isNotEmpty(query.getBucketName()), ResourceFile::getBucketName, query.getBucketName())
+                .eq(StringUtils.isNotEmpty(query.getModule()), ResourceFile::getModule, query.getModule())
+                .eq(query.getFileType() != null, ResourceFile::getFileType, query.getFileType())
+                .like(StringUtils.isNotEmpty(query.getPath()), ResourceFile::getPath, query.getPath())
+                .like(StringUtils.isNotEmpty(query.getRelativePath()), ResourceFile::getRelativePath, query.getRelativePath());
+        }
+        wrapper.orderByDesc(ResourceFile::getGmtCreate);
+        return resourceFileMapper.selectList(wrapper);
+    }
+
+    @Override
+    public ResourceFile selectById(Long id) {
+        if (id == null) {
+            return null;
+        }
+        return resourceFileMapper.selectById(id);
     }
 
     @Override
@@ -85,5 +112,21 @@ public class ResourceFileServiceImpl implements IResourceFileService {
         LambdaQueryWrapper<ResourceFile> wrapper = Wrappers.lambdaQuery(ResourceFile.class);
         wrapper.eq(ResourceFile::getPath, path).or().eq(ResourceFile::getRelativePath, path);
         resourceFileMapper.delete(wrapper);
+    }
+
+    @Override
+    public int deleteByIds(Long[] ids) {
+        if (ids == null || ids.length == 0) {
+            return 0;
+        }
+        int rows = 0;
+        for (Long id : ids) {
+            if (id == null) {
+                continue;
+            }
+            // 逐条删除以触发逻辑删除审计填充
+            rows += resourceFileMapper.deleteById(id);
+        }
+        return rows;
     }
 }

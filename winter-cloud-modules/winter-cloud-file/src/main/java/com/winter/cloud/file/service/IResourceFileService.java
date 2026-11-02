@@ -3,10 +3,22 @@ package com.winter.cloud.file.service;
 import com.winter.cloud.file.domain.entity.ResourceFile;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 /**
  * 资源文件上传记录
  */
 public interface IResourceFileService {
+
+    /**
+     * 条件列表（配合 PageHelper 分页）
+     */
+    List<ResourceFile> selectResourceFileList(ResourceFile query);
+
+    /**
+     * 详情
+     */
+    ResourceFile selectById(Long id);
 
     /**
      * 按 MD5 查询
@@ -28,4 +40,9 @@ public interface IResourceFileService {
      * 按路径删除记录
      */
     void deleteByPath(String path);
+
+    /**
+     * 按主键逻辑删除记录（不删对象存储，由上层决定是否删文件）
+     */
+    int deleteByIds(Long[] ids);
 }

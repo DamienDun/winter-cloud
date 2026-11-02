@@ -49,7 +49,6 @@ export default {
       fileUrls: '',
       imageUrls: '',
       fileType: ['bmp', 'gif', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'html', 'htm', 'txt', 'rar', 'zip', 'gz', 'bz2', 'mp4', 'avi', 'rmvb', 'pdf'],
-      // 对齐后端图片扩展名
       imageType: ['bmp', 'gif', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dib', 'webp', 'svg']
     }
   },

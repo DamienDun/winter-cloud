@@ -91,15 +91,27 @@ export const constantRoutes = [
   {
     path: '/file',
     component: Layout,
-    redirect: '/file/upload',
+    redirect: '/file/resource',
     name: 'File',
     meta: { title: '文件管理', icon: 'upload' },
     children: [
+      {
+        path: 'resource',
+        component: () => import('@/views/file/resource/index'),
+        name: 'ResourceFile',
+        meta: { title: '资源文件', icon: 'list' }
+      },
       {
         path: 'upload',
         component: () => import('@/views/file/upload/index'),
         name: 'FileUpload',
         meta: { title: '文件上传', icon: 'upload' }
+      },
+      {
+        path: 'bigFile',
+        component: () => import('@/views/file/bigFile/index'),
+        name: 'BigFileTask',
+        meta: { title: '大文件任务', icon: 'list' }
       },
       {
         path: 'bigUpload',

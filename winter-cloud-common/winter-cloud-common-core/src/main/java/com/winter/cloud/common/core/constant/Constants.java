@@ -167,4 +167,19 @@ public interface Constants {
      * CORS 暴露自定义响应头
      */
     String RESP_ACCESS_CONTROL_EXPOSE_HEADERS = "Access-Control-Expose-Headers";
+
+    /**
+     * 逗号切割正则（兼容中英文逗号）
+     */
+    String COMMA_SPLIT_REGEX = ",|，";
+
+    /**
+     * 冒号
+     */
+    String COLON = ":";
+
+    /**
+     * 英文逗号
+     */
+    String ENGLISH_COMMA = ",";
 }
