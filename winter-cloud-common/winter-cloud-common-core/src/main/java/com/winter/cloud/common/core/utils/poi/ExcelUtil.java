@@ -1,5 +1,31 @@
 package com.winter.cloud.common.core.utils.poi;
 
+import com.winter.cloud.common.core.annotation.Excel;
+import com.winter.cloud.common.core.annotation.Excel.ColumnType;
+import com.winter.cloud.common.core.annotation.Excel.Type;
+import com.winter.cloud.common.core.annotation.Excels;
+import com.winter.cloud.common.core.exception.UtilException;
+import com.winter.cloud.common.core.text.Convert;
+import com.winter.cloud.common.core.utils.DateUtils;
+import com.winter.cloud.common.core.utils.SpringUtils;
+import com.winter.cloud.common.core.utils.StringUtils;
+import com.winter.cloud.common.core.utils.file.FileTypeUtils;
+import com.winter.cloud.common.core.utils.file.ImageUtils;
+import com.winter.cloud.common.core.utils.reflect.ReflectUtils;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.RegExUtils;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.ss.util.CellRangeAddressList;
+import org.apache.poi.util.IOUtils;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
+import org.apache.poi.xssf.usermodel.XSSFDataValidation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -9,61 +35,8 @@ import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
-import javax.servlet.http.HttpServletResponse;
-
-import com.winter.cloud.common.core.utils.file.ImageUtils;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.RegExUtils;
-import org.apache.commons.lang3.reflect.FieldUtils;
-import org.apache.poi.ss.usermodel.BorderStyle;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.ClientAnchor;
-import org.apache.poi.ss.usermodel.DataFormat;
-import org.apache.poi.ss.usermodel.DataValidation;
-import org.apache.poi.ss.usermodel.DataValidationConstraint;
-import org.apache.poi.ss.usermodel.DataValidationHelper;
-import org.apache.poi.ss.usermodel.DateUtil;
-import org.apache.poi.ss.usermodel.Drawing;
-import org.apache.poi.ss.usermodel.FillPatternType;
-import org.apache.poi.ss.usermodel.Font;
-import org.apache.poi.ss.usermodel.HorizontalAlignment;
-import org.apache.poi.ss.usermodel.IndexedColors;
-import org.apache.poi.ss.usermodel.Name;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.VerticalAlignment;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
-import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.ss.util.CellRangeAddressList;
-import org.apache.poi.util.IOUtils;
-import org.apache.poi.xssf.streaming.SXSSFWorkbook;
-import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
-import org.apache.poi.xssf.usermodel.XSSFDataValidation;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.winter.cloud.common.core.annotation.Excel;
-import com.winter.cloud.common.core.annotation.Excel.ColumnType;
-import com.winter.cloud.common.core.annotation.Excel.Type;
-import com.winter.cloud.common.core.annotation.Excels;
-import com.winter.cloud.common.core.exception.UtilException;
-import com.winter.cloud.common.core.text.Convert;
-import com.winter.cloud.common.core.utils.DateUtils;
-import com.winter.cloud.common.core.utils.StringUtils;
-import com.winter.cloud.common.core.utils.file.FileTypeUtils;
-import com.winter.cloud.common.core.utils.reflect.ReflectUtils;
 
 /**
  * Excel相关处理
@@ -459,6 +432,11 @@ public class ExcelUtil<T>
                         if (StringUtils.isNotEmpty(attr.readConverterExp()))
                         {
                             val = reverseByExp(Convert.toStr(val), attr.readConverterExp(), attr.separator());
+                        }
+                        else if (StringUtils.isNotEmpty(attr.dictType()))
+                        {
+                            // 标签 → 字典值；无 ExcelDictHandler 时保持原值
+                            val = reverseDictByExp(Convert.toStr(val), attr.dictType(), attr.separator());
                         }
                         else if (!attr.handler().equals(ExcelHandlerAdapter.class))
                         {
@@ -963,17 +941,22 @@ public class ExcelUtil<T>
             // 设置列宽
             sheet.setColumnWidth(column, (int) ((attr.width() + 0.72) * 256));
         }
-        if (StringUtils.isNotEmpty(attr.prompt()) || attr.combo().length > 0)
+        if (StringUtils.isNotEmpty(attr.prompt()) || attr.combo().length > 0 || attr.comboReadDict())
         {
-            if (attr.combo().length > 15 || StringUtils.join(attr.combo()).length() > 255)
+            String[] comboArray = attr.combo();
+            if (attr.comboReadDict())
+            {
+                comboArray = getDictLabelArr(attr.dictType());
+            }
+            if (comboArray.length > 15 || StringUtils.join(comboArray).length() > 255)
             {
                 // 如果下拉数大于15或字符串长度大于255，则使用一个新sheet存储，避免生成的模板下拉值获取不到
-                setXSSFValidationWithHidden(sheet, attr.combo(), attr.prompt(), 1, 100, column, column);
+                setXSSFValidationWithHidden(sheet, comboArray, attr.prompt(), 1, 100, column, column);
             }
             else
             {
                 // 提示信息或只能选择不能输入的列内容.
-                setPromptOrValidation(sheet, attr.combo(), attr.prompt(), 1, 100, column, column);
+                setPromptOrValidation(sheet, comboArray, attr.prompt(), 1, 100, column, column);
             }
         }
     }
@@ -1007,6 +990,7 @@ public class ExcelUtil<T>
                 String dateFormat = attr.dateFormat();
                 String readConverterExp = attr.readConverterExp();
                 String separator = attr.separator();
+                String dictType = attr.dictType();
                 if (StringUtils.isNotEmpty(dateFormat) && StringUtils.isNotNull(value))
                 {
                     cell.setCellStyle(createCellStyle(cell.getCellStyle(), dateFormat));
@@ -1015,6 +999,11 @@ public class ExcelUtil<T>
                 else if (StringUtils.isNotEmpty(readConverterExp) && StringUtils.isNotNull(value))
                 {
                     cell.setCellValue(convertByExp(Convert.toStr(value), readConverterExp, separator));
+                }
+                else if (StringUtils.isNotEmpty(dictType) && StringUtils.isNotNull(value))
+                {
+                    // 字典值 → 标签
+                    cell.setCellValue(convertDictByExp(Convert.toStr(value), dictType, separator));
                 }
                 else if (value instanceof BigDecimal && -1 != attr.scale())
                 {
@@ -1240,6 +1229,61 @@ public class ExcelUtil<T>
             }
         }
         return StringUtils.stripEnd(propertyString.toString(), separator);
+    }
+
+    /**
+     * 解析字典值（导出：value → label）
+     */
+    public static String convertDictByExp(String dictValue, String dictType, String separator)
+    {
+        ExcelDictHandler handler = resolveExcelDictHandler();
+        if (handler == null)
+        {
+            return dictValue;
+        }
+        return handler.getDictLabel(dictType, dictValue, separator);
+    }
+
+    /**
+     * 反向解析字典值（导入：label → value）
+     */
+    public static String reverseDictByExp(String dictLabel, String dictType, String separator)
+    {
+        ExcelDictHandler handler = resolveExcelDictHandler();
+        if (handler == null)
+        {
+            return dictLabel;
+        }
+        return handler.getDictValue(dictType, dictLabel, separator);
+    }
+
+    /**
+     * 获取字典标签数组（导入模板下拉）
+     */
+    public static String[] getDictLabelArr(String dictType)
+    {
+        ExcelDictHandler handler = resolveExcelDictHandler();
+        if (handler == null)
+        {
+            return new String[0];
+        }
+        String[] labels = handler.getDictLabelArr(dictType);
+        return labels != null ? labels : new String[0];
+    }
+
+    /**
+     * 解析 security 模块注册的字典处理器；未注册时返回 null（不影响无字典导出）
+     */
+    private static ExcelDictHandler resolveExcelDictHandler()
+    {
+        try
+        {
+            return SpringUtils.getBean(ExcelDictHandler.class);
+        }
+        catch (Exception e)
+        {
+            return null;
+        }
     }
 
     /**

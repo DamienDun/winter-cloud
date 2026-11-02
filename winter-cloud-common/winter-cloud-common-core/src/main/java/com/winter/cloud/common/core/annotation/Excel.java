@@ -1,14 +1,14 @@
 package com.winter.cloud.common.core.annotation;
 
+import com.winter.cloud.common.core.utils.poi.ExcelHandlerAdapter;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.math.BigDecimal;
-
-import com.winter.cloud.common.core.utils.poi.ExcelHandlerAdapter;
-import org.apache.poi.ss.usermodel.HorizontalAlignment;
-import org.apache.poi.ss.usermodel.IndexedColors;
 
 /**
  * 自定义导出Excel数据注解
@@ -33,6 +33,12 @@ public @interface Excel
      * 日期格式, 如: yyyy-MM-dd
      */
     public String dateFormat() default "";
+
+    /**
+     * 如果是字典类型，请设置字典的 type 值（如: sys_user_sex）。
+     * <p>依赖 common-security 注册的 {@code ExcelDictHandler}，从 Redis 字典缓存转换。</p>
+     */
+    public String dictType() default "";
 
     /**
      * 读取内容转表达式 (如: 0=男,1=女,2=未知)
@@ -88,6 +94,11 @@ public @interface Excel
      * 设置只能选择不能输入的列内容.
      */
     public String[] combo() default {};
+
+    /**
+     * 是否从字典读取下拉选项；为 true 时需同时设置 {@link #dictType()}。
+     */
+    public boolean comboReadDict() default false;
 
     /**
      * 是否需要纵向合并单元格,应对需求:含有list集合单元格)
