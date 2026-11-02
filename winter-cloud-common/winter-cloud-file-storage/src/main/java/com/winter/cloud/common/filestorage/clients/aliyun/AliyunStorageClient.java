@@ -56,8 +56,19 @@ public class AliyunStorageClient extends AbstractCloudStorageClient<AliyunBucket
                 properties.getDefaultBucketName(),
                 properties.getAccessKey(),
                 properties.getSecretKey(),
-                properties.toCannedAccessControlList());
+                parseCannedAcl(properties.getCannedACL()));
         this.setStorageClientProperties(properties);
+    }
+
+    private static CannedAccessControlList parseCannedAcl(String cannedACL) {
+        if (StringUtils.isEmpty(cannedACL)) {
+            return CannedAccessControlList.PublicRead;
+        }
+        try {
+            return CannedAccessControlList.parse(cannedACL);
+        } catch (Exception e) {
+            return CannedAccessControlList.PublicRead;
+        }
     }
 
     /**

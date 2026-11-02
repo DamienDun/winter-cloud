@@ -1,12 +1,14 @@
 package com.winter.cloud.common.filestorage.clients.fastdfs;
 
-import com.winter.cloud.common.filestorage.support.exception.NotSupportException;
+import com.winter.cloud.common.core.exception.ConfigureException;
 import com.winter.cloud.common.core.exception.base.BaseException;
 import com.winter.cloud.common.core.utils.ExceptionUtil;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.filestorage.*;
+import com.winter.cloud.common.filestorage.support.exception.NotSupportException;
 import org.apache.commons.io.IOUtils;
 import org.csource.common.NameValuePair;
+import org.csource.fastdfs.ClientGlobal;
 import org.csource.fastdfs.StorageClient;
 import org.csource.fastdfs.TrackerClient;
 import org.csource.fastdfs.TrackerServer;
@@ -55,6 +57,11 @@ public class FastDFSStorageClient extends AbstractStorageClient<FastDFSBucket> {
      */
     public FastDFSStorageClient(FastDFSStorageClientProperties properties) {
         this(properties.getEndpoint(), properties.getDefaultBucketName());
+        try {
+            ClientGlobal.initByProperties(properties.createFastDFSProperties());
+        } catch (Exception e) {
+            throw new ConfigureException(e, "初始化FastDFS出错:" + e.getMessage());
+        }
         this.setStorageClientProperties(properties);
     }
 

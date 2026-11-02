@@ -1,10 +1,13 @@
 package com.winter.cloud.file;
 
+import com.winter.cloud.common.core.config.WinterConfig;
+import com.winter.cloud.common.filestorage.annotation.EnableWinterStorage;
 import com.winter.cloud.common.swagger.annotation.ApiGroup;
 import com.winter.cloud.common.swagger.annotation.EnableWinterSwagger;
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.context.annotation.Import;
 
 /**
  * 文件服务
@@ -18,7 +21,12 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
         groups = {
                 @ApiGroup(groupName = "文件服务模块", packages = {"com.winter.cloud.file.controller"}),
         })
-@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
+@EnableWinterStorage
+@Import(WinterConfig.class)
+// 仅扫描本模块；file-storage 的 Mapper 由 WinterStorageMybatisConfiguration 单独扫描，
+// 避免把 support.mapper.StorageBaseMapper 这类泛型基座误注册成 Bean
+@MapperScan("com.winter.cloud.file.mapper")
+@SpringBootApplication
 public class WinterFileApplication {
     public static void main(String[] args) {
         SpringApplication.run(WinterFileApplication.class, args);

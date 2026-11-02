@@ -412,7 +412,10 @@ public class BigFileUploadServiceImpl implements BigFileUploadService {
         String targetChannelId = StringUtils.isNotEmpty(channelId)
                 ? channelId : winterStorageProperties.getMultipartChannel();
         if (StringUtils.isEmpty(targetChannelId)) {
-            throw new ServiceException("未指定存储通道，请传入 channelId 或配置 winter.storage.client.multipart-channel");
+            targetChannelId = winterStorageProperties.getDefaultChannel();
+        }
+        if (StringUtils.isEmpty(targetChannelId)) {
+            throw new ServiceException("未指定存储通道，请传入 channelId 或配置 winter.storage.client.multipart-channel / default-channel");
         }
         StorageClient client = storageClientContext.getChannel(targetChannelId);
         if (client == null) {

@@ -71,34 +71,41 @@
             <artifactId>httpclient</artifactId>
         </dependency>
 
-        <!-- 阿里云 OSS -->
+        <!-- 以下云厂商 SDK 均为 optional：业务模块按需显式引入 -->
         <dependency>
             <groupId>com.aliyun.oss</groupId>
             <artifactId>aliyun-sdk-oss</artifactId>
+            <optional>true</optional>
         </dependency>
-
-        <!-- FastDFS -->
         <dependency>
             <groupId>cn.bestwu</groupId>
             <artifactId>fastdfs-client-java</artifactId>
+            <optional>true</optional>
         </dependency>
-
-        <!-- MinIO（与源模块 API 对齐，使用 7.x） -->
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
+            <optional>true</optional>
         </dependency>
-
-        <!-- AWS S3 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okio</groupId>
+            <artifactId>okio</artifactId>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-s3</artifactId>
+            <optional>true</optional>
         </dependency>
-
-        <!-- 华为 OBS -->
         <dependency>
             <groupId>com.huaweicloud</groupId>
             <artifactId>esdk-obs-java</artifactId>
+            <optional>true</optional>
             <exclusions>
                 <exclusion>
                     <groupId>com.squareup.okhttp3</groupId>
@@ -130,11 +137,10 @@
                 </exclusion>
             </exclusions>
         </dependency>
-
-        <!-- 腾讯 COS -->
         <dependency>
             <groupId>com.qcloud</groupId>
             <artifactId>cos_api</artifactId>
+            <optional>true</optional>
             <exclusions>
                 <exclusion>
                     <groupId>org.apache.httpcomponents</groupId>

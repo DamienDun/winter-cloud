@@ -4,6 +4,7 @@ import com.winter.cloud.common.core.config.WinterConfig;
 import com.winter.cloud.common.filestorage.clients.aliyun.AliyunStorageClientProperties;
 import com.winter.cloud.common.filestorage.clients.fastdfs.FastDFSStorageClientProperties;
 import com.winter.cloud.common.filestorage.clients.huawei.HuaWeiStorageClientProperties;
+import com.winter.cloud.common.filestorage.clients.local.LocalStorageClientProperties;
 import com.winter.cloud.common.filestorage.clients.minio.MinioStorageClientProperties;
 import com.winter.cloud.common.filestorage.clients.tencent.TencentStorageClientProperties;
 import com.winter.cloud.common.filestorage.clients.aws.AwsStorageClientProperties;
@@ -58,6 +59,11 @@ public class WinterStorageProperties implements Serializable {
     private FastDFSStorageClientProperties fastDFS = new FastDFSStorageClientProperties();
 
     /**
+     * 本地存储属性
+     */
+    private LocalStorageClientProperties local = new LocalStorageClientProperties();
+
+    /**
      * Minio 属性
      */
     private MinioStorageClientProperties minio = new MinioStorageClientProperties();
@@ -73,8 +79,14 @@ public class WinterStorageProperties implements Serializable {
     private int uploadBigFileCount = 10000;
 
     /**
+     * 普通上传/下载默认存储通道（Minio / local / fastDFS / Aws / aliyunOOS / HuaWeiOBS / TencentCOS）。
+     * 为空时若仅启用一个通道则自动选用；启用多个时必须配置。
+     */
+    private String defaultChannel;
+
+    /**
      * 大文件分片使用的存储通道（Minio / Aws / aliyunOOS / HuaWeiOBS / TencentCOS）。
-     * 与普通上传一致：由配置指定；也可在申请接口传入 channelId 覆盖。
+     * 为空则回退 defaultChannel；也可在申请接口传入 channelId 覆盖。
      */
     private String multipartChannel;
 

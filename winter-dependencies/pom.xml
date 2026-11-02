@@ -50,6 +50,9 @@
         <fastdfs.client.version>1.27</fastdfs.client.version>
         <minio.client.version>7.0.2</minio.client.version>
         <minio.version>8.2.2</minio.version>
+        <!-- MinIO 7.x 需 okhttp3 3.x；覆盖 Spring Boot BOM 默认的 4.x，避免 NoSuchFieldError / Kotlin 元数据冲突 -->
+        <okhttp3.version>3.14.9</okhttp3.version>
+        <okio.version>1.17.5</okio.version>
         <aws.s3.sdk.version>1.12.565</aws.s3.sdk.version>
         <aliyun.sdk.oss.version>3.4.2</aliyun.sdk.oss.version>
         <aliyun.sdk.core.version>4.3.1</aliyun.sdk.core.version>
@@ -234,6 +237,16 @@
                 <groupId>io.minio</groupId>
                 <artifactId>minio</artifactId>
                 <version>${minio.client.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>${okhttp3.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.squareup.okio</groupId>
+                <artifactId>okio</artifactId>
+                <version>${okio.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.amazonaws</groupId>
