@@ -4,13 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.core.utils.file.FileTypeUtils;
-import com.winter.cloud.file.domain.ResourceFile;
+import com.winter.cloud.file.domain.entity.ResourceFile;
 import com.winter.cloud.file.enums.ResourceFileTypeEnum;
 import com.winter.cloud.file.mapper.ResourceFileMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.Date;
 
 /**
  * 资源文件上传记录服务
@@ -30,7 +28,7 @@ public class ResourceFileServiceImpl implements IResourceFileService {
             return null;
         }
         LambdaQueryWrapper<ResourceFile> wrapper = Wrappers.lambdaQuery(ResourceFile.class);
-        wrapper.eq(ResourceFile::getFileMd5, fileMd5).orderByAsc(ResourceFile::getCreateTime).last("LIMIT 1");
+        wrapper.eq(ResourceFile::getFileMd5, fileMd5).orderByAsc(ResourceFile::getGmtCreate).last("LIMIT 1");
         return resourceFileMapper.selectOne(wrapper);
     }
 
@@ -47,7 +45,6 @@ public class ResourceFileServiceImpl implements IResourceFileService {
     @Override
     public ResourceFile saveUploadRecord(MultipartFile file, String accessUrl, String relativePath,
                                          String channelId, String bucketName, String fileMd5, Long length) {
-        Date now = new Date();
         if (StringUtils.isNotEmpty(fileMd5)) {
             ResourceFile exist = queryByFileMd5(fileMd5);
             if (exist != null) {
@@ -56,7 +53,7 @@ public class ResourceFileServiceImpl implements IResourceFileService {
                 if (file != null && StringUtils.isNotEmpty(file.getOriginalFilename())) {
                     exist.setOriginName(file.getOriginalFilename());
                 }
-                exist.setUpdateTime(now);
+                // gmtModified / modifiedUserId 由 MetaObjectHandler 填充
                 resourceFileMapper.updateById(exist);
                 return exist;
             }
@@ -74,8 +71,7 @@ public class ResourceFileServiceImpl implements IResourceFileService {
         entity.setApplyUploadCount(1);
         entity.setChannelId(channelId);
         entity.setBucketName(bucketName);
-        entity.setCreateTime(now);
-        entity.setUpdateTime(now);
+        // gmtCreate / createdUserId 等由 MetaObjectHandler 填充
         resourceFileMapper.insert(entity);
         return entity;
     }
@@ -85,6 +81,7 @@ public class ResourceFileServiceImpl implements IResourceFileService {
         if (StringUtils.isEmpty(path)) {
             return;
         }
+        // 逻辑删除：按实体删除以便触发审计填充
         LambdaQueryWrapper<ResourceFile> wrapper = Wrappers.lambdaQuery(ResourceFile.class);
         wrapper.eq(ResourceFile::getPath, path).or().eq(ResourceFile::getRelativePath, path);
         resourceFileMapper.delete(wrapper);

@@ -38,10 +38,27 @@ CREATE TABLE IF NOT EXISTS `fs_resource_file` (
   `channel_id` varchar(50) DEFAULT NULL COMMENT '存储通道ID',
   `bucket_name` varchar(100) DEFAULT NULL COMMENT '桶名',
   `remark` varchar(255) DEFAULT NULL COMMENT '备注',
-  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
-  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  `is_deleted` tinyint(4) DEFAULT 0 COMMENT '是否删除;0未删;1已删',
+  `gmt_create` datetime DEFAULT NULL COMMENT '创建时间',
+  `gmt_modified` datetime DEFAULT NULL COMMENT '更新时间',
+  `gmt_delete` datetime DEFAULT NULL COMMENT '删除时间',
+  `created_user_id` bigint(20) DEFAULT NULL COMMENT '创建人',
+  `modified_user_id` bigint(20) DEFAULT NULL COMMENT '更新人',
+  `deleted_user_id` bigint(20) DEFAULT NULL COMMENT '删除人',
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_file_md5` (`file_md5`),
   KEY `idx_path` (`path`(191)),
-  KEY `idx_relative_path` (`relative_path`(191))
+  KEY `idx_relative_path` (`relative_path`(191)),
+  KEY `idx_is_deleted` (`is_deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='资源文件上传记录';
+
+-- 若已存在旧版 fs_resource_file（create_time/update_time），可执行以下迁移：
+-- ALTER TABLE `fs_resource_file`
+--   CHANGE COLUMN `create_time` `gmt_create` datetime DEFAULT NULL COMMENT '创建时间',
+--   CHANGE COLUMN `update_time` `gmt_modified` datetime DEFAULT NULL COMMENT '更新时间',
+--   ADD COLUMN `is_deleted` tinyint(4) DEFAULT 0 COMMENT '是否删除;0未删;1已删' AFTER `remark`,
+--   ADD COLUMN `gmt_delete` datetime DEFAULT NULL COMMENT '删除时间' AFTER `gmt_modified`,
+--   ADD COLUMN `created_user_id` bigint(20) DEFAULT NULL COMMENT '创建人' AFTER `gmt_delete`,
+--   ADD COLUMN `modified_user_id` bigint(20) DEFAULT NULL COMMENT '更新人' AFTER `created_user_id`,
+--   ADD COLUMN `deleted_user_id` bigint(20) DEFAULT NULL COMMENT '删除人' AFTER `modified_user_id`,
+--   ADD KEY `idx_is_deleted` (`is_deleted`);

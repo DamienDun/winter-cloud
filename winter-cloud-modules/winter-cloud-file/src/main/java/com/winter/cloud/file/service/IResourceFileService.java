@@ -1,6 +1,6 @@
 package com.winter.cloud.file.service;
 
-import com.winter.cloud.file.domain.ResourceFile;
+import com.winter.cloud.file.domain.entity.ResourceFile;
 import org.springframework.web.multipart.MultipartFile;
 
 /**

@@ -1,12 +1,12 @@
 package com.winter.cloud.file.mapper;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.winter.cloud.file.domain.ResourceFile;
+import com.winter.cloud.common.mybatis.mapper.DefaultBaseMapper;
+import com.winter.cloud.file.domain.entity.ResourceFile;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
  * 资源文件 Mapper
  */
 @Mapper
-public interface ResourceFileMapper extends BaseMapper<ResourceFile> {
+public interface ResourceFileMapper extends DefaultBaseMapper<ResourceFile> {
 }

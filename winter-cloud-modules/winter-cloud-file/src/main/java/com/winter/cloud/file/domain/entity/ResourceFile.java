@@ -1,28 +1,21 @@
-package com.winter.cloud.file.domain;
+package com.winter.cloud.file.domain.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.winter.cloud.common.mybatis.domain.entity.DefaultBaseEntity;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.io.Serializable;
-import java.util.Date;
-
 /**
- * 资源文件上传记录（对齐 portal ResourceFile）
+ * 资源文件上传记录（对齐 portal ResourceFile，继承 DefaultBaseEntity）
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @TableName("fs_resource_file")
-public class ResourceFile implements Serializable {
+public class ResourceFile extends DefaultBaseEntity {
 
     private static final long serialVersionUID = 1L;
-
-    @TableId(value = "id", type = IdType.ASSIGN_ID)
-    private Long id;
 
     /** 原始文件名 */
     private String originName;
@@ -53,10 +46,4 @@ public class ResourceFile implements Serializable {
 
     /** 桶名 */
     private String bucketName;
-
-    private String remark;
-
-    private Date createTime;
-
-    private Date updateTime;
 }

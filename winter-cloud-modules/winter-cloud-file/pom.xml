@@ -59,6 +59,12 @@
             <artifactId>winter-cloud-common-datasource</artifactId>
         </dependency>
 
+        <!-- DefaultBaseEntity / 审计填充 / DefaultBaseMapper -->
+        <dependency>
+            <groupId>com.winter</groupId>
+            <artifactId>winter-cloud-common-mybatis</artifactId>
+        </dependency>
+
         <!-- 统一对象存储；云厂商 SDK 在 file-storage 中为 optional，此处按需引入 -->
         <dependency>
             <groupId>com.winter</groupId>

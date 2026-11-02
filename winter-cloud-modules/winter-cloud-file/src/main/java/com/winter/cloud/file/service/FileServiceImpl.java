@@ -8,7 +8,7 @@ import com.winter.cloud.common.filestorage.FileStorageObject;
 import com.winter.cloud.common.filestorage.StorageClient;
 import com.winter.cloud.common.filestorage.StorageClientContext;
 import com.winter.cloud.common.filestorage.properties.WinterStorageProperties;
-import com.winter.cloud.file.domain.ResourceFile;
+import com.winter.cloud.file.domain.entity.ResourceFile;
 import com.winter.cloud.file.domain.dto.FileDownloadZipInput;
 import com.winter.cloud.file.domain.dto.FileDownloadZipSpecifyNameInput;
 import com.winter.cloud.file.domain.dto.FileNameVo;
