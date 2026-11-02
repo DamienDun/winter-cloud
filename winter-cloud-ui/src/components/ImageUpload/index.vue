@@ -70,10 +70,10 @@ export default {
        type: Number,
       default: 5
     },
-    // 文件类型, 例如['png', 'jpg', 'jpeg']
+    // 对齐后端图片类型：MimeTypeUtils.IMAGE_EXTENSION + storage 图类型 + ResourceFileTypeEnum
     fileType: {
       type: Array,
-      default: () => ["png", "jpg", "jpeg"]
+      default: () => ["bmp", "gif", "jpg", "jpeg", "png", "tif", "tiff", "dib", "webp", "svg"]
     },
     // 是否显示提示
     isShowTip: {

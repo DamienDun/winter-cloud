@@ -87,6 +87,27 @@ export const constantRoutes = [
         meta: { title: '个人中心', icon: 'user' }
       }
     ]
+  },
+  {
+    path: '/file',
+    component: Layout,
+    redirect: '/file/upload',
+    name: 'File',
+    meta: { title: '文件管理', icon: 'upload' },
+    children: [
+      {
+        path: 'upload',
+        component: () => import('@/views/file/upload/index'),
+        name: 'FileUpload',
+        meta: { title: '文件上传', icon: 'upload' }
+      },
+      {
+        path: 'bigUpload',
+        component: () => import('@/views/file/bigUpload/index'),
+        name: 'BigFileUpload',
+        meta: { title: '大文件上传', icon: 'upload' }
+      }
+    ]
   }
 ]
 

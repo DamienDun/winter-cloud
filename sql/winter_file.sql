@@ -62,3 +62,13 @@ CREATE TABLE IF NOT EXISTS `fs_resource_file` (
 --   ADD COLUMN `modified_user_id` bigint(20) DEFAULT NULL COMMENT '更新人' AFTER `created_user_id`,
 --   ADD COLUMN `deleted_user_id` bigint(20) DEFAULT NULL COMMENT '删除人' AFTER `modified_user_id`,
 --   ADD KEY `idx_is_deleted` (`is_deleted`);
+
+-- ----------------------------
+-- 文件管理菜单（前端已挂 constantRoutes，以下供动态菜单/权限同步可选执行）
+-- ----------------------------
+-- INSERT INTO sys_menu VALUES('2000', '文件管理', '0', '5', 'file', null, '', '', 1, 0, 'M', '0', '0', '', 'upload', 'admin', sysdate(), '', null, '文件管理目录');
+-- INSERT INTO sys_menu VALUES('2001', '文件上传', '2000', '1', 'upload', 'file/upload/index', '', '', 1, 0, 'C', '0', '0', 'file:upload:list', 'upload', 'admin', sysdate(), '', null, '普通文件上传');
+-- INSERT INTO sys_menu VALUES('2002', '大文件上传', '2000', '2', 'bigUpload', 'file/bigUpload/index', '', '', 1, 0, 'C', '0', '0', 'file:bigUpload:list', 'upload', 'admin', sysdate(), '', null, '大文件分片上传');
+-- INSERT INTO sys_role_menu VALUES ('1', '2000');
+-- INSERT INTO sys_role_menu VALUES ('1', '2001');
+-- INSERT INTO sys_role_menu VALUES ('1', '2002');

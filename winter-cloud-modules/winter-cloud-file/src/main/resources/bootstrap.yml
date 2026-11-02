@@ -1,6 +1,10 @@
 # Tomcat
 server:
   port: 9300
+  tomcat:
+    # 大文件分片上传：单连接请求体上限（需大于 spring.servlet.multipart.max-request-size）
+    max-swallow-size: 100MB
+    max-http-form-post-size: 100MB
 
 # Spring
 spring:
@@ -10,6 +14,12 @@ spring:
   profiles:
     # 环境配置
     active: dev
+  servlet:
+    multipart:
+      enabled: true
+      # 默认 1MB；前端分片 5~20MB，后端默认分片 10MB，这里放宽到 100MB
+      max-file-size: 100MB
+      max-request-size: 100MB
   cloud:
     nacos:
       discovery:

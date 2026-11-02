@@ -9,9 +9,7 @@ import com.winter.cloud.common.filestorage.dto.UploadInput;
 import com.winter.cloud.common.filestorage.dto.UploadOptionsDto;
 import com.winter.cloud.common.filestorage.dto.UploadOutput;
 import com.winter.cloud.common.filestorage.dto.UploadStatus;
-import com.winter.cloud.common.filestorage.enums.FsBigFileUploadTaskStatusEnum;
 import com.winter.cloud.common.filestorage.service.BigFileUploadService;
-import com.winter.cloud.file.service.IResourceFileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +27,7 @@ import javax.validation.Valid;
 
 /**
  * 大文件分片上传接口。
+ * 任务状态落 fs_big_file_upload_task，不再写入 ResourceFile。
  * 存储通道由入参 channelId 或配置 winter.storage.client.multipart-channel / default-channel 决定。
  * 网关 StripPrefix=1 后路径为 /bigFile/**，对外为 /file/bigFile/**
  */
@@ -39,9 +38,6 @@ public class BigFileController {
 
     @Autowired
     private BigFileUploadService bigFileUploadService;
-
-    @Autowired
-    private IResourceFileService resourceFileService;
 
     @Operation(summary = "上传申请")
     @PostMapping("/upload/apply")
@@ -60,9 +56,7 @@ public class BigFileController {
     public R<UploadOutput> upload(@Valid BigFileUploadInput bigFileUploadInput) throws Exception {
         UploadInput input = AutoMapUtils.map(bigFileUploadInput, UploadInput.class);
         input.setInputStream(bigFileUploadInput.getFile().getInputStream());
-        UploadOutput output = bigFileUploadService.multipartUpload(input);
-        recordIfComplete(output);
-        return R.ok(output);
+        return R.ok(bigFileUploadService.multipartUpload(input));
     }
 
     @Operation(summary = "取消上传")
@@ -87,24 +81,6 @@ public class BigFileController {
     @PostMapping("/merge")
     public R<Void> merge(@RequestBody @Valid UploadOptionsDto input) throws Exception {
         bigFileUploadService.merge(input.getUploadId());
-        UploadStatus status = bigFileUploadService.queryMultipartStatus(input);
-        recordIfComplete(status);
         return R.ok();
-    }
-
-    /**
-     * 大文件上传完成后写入资源表
-     */
-    private void recordIfComplete(UploadStatus status) {
-        if (status == null) {
-            return;
-        }
-        boolean completed = status.isComplete()
-            || FsBigFileUploadTaskStatusEnum.COMPLETE_UPLOAD.getCode().equals(status.getStatus());
-        if (!completed) {
-            return;
-        }
-        resourceFileService.saveUploadRecord(null, status.getAccessPath(), status.getFilePath(),
-            status.getChannelId(), status.getBucketName(), status.getFileMd5(), status.getTotalBytes());
     }
 }
