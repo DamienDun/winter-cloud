@@ -1,17 +1,17 @@
 package com.winter.cloud.common.security.aspect;
 
-import java.lang.reflect.Method;
-
 import com.winter.cloud.common.security.annotation.RequiresLogin;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.common.security.annotation.RequiresRoles;
+import com.winter.cloud.common.security.auth.AuthUtil;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.stereotype.Component;
-import com.winter.cloud.common.security.auth.AuthUtil;
+
+import java.lang.reflect.Method;
 
 /**
  * 基于 Spring Aop 的注解鉴权
@@ -32,9 +32,9 @@ public class PreAuthorizeAspect
     /**
      * 定义AOP签名 (切入所有使用鉴权注解的方法)
      */
-    public static final String POINTCUT_SIGN = " @annotation(com.ruoyi.common.security.annotation.RequiresLogin) || "
-            + "@annotation(com.ruoyi.common.security.annotation.RequiresPermissions) || "
-            + "@annotation(com.ruoyi.common.security.annotation.RequiresRoles)";
+    public static final String POINTCUT_SIGN = " @annotation(com.winter.cloud.common.security.annotation.RequiresLogin) || "
+            + "@annotation(com.winter.cloud.common.security.annotation.RequiresPermissions) || "
+            + "@annotation(com.winter.cloud.common.security.annotation.RequiresRoles)";
 
     /**
      * 声明AOP签名
