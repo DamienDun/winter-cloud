@@ -1,11 +1,13 @@
 package com.winter.cloud.system.controller;
 
+import com.winter.cloud.common.core.domain.R;
 import com.winter.cloud.common.core.utils.poi.ExcelUtil;
 import com.winter.cloud.common.core.web.controller.BaseController;
 import com.winter.cloud.common.core.web.domain.AjaxResult;
 import com.winter.cloud.common.core.web.page.TableDataInfo;
 import com.winter.cloud.common.log.annotation.Log;
 import com.winter.cloud.common.log.enums.BusinessType;
+import com.winter.cloud.common.security.annotation.InnerAuth;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.common.security.utils.SecurityUtils;
 import com.winter.cloud.system.domain.SysConfig;
@@ -69,6 +71,17 @@ public class SysConfigController extends BaseController {
     @Operation(summary = "根据参数键名查询参数值")
     public AjaxResult getConfigKey(@PathVariable String configKey) {
         return success(configService.selectConfigByKey(configKey));
+    }
+
+    /**
+     * 内部调用：按键名查参数（Redis 未命中时回源 DB 并回填缓存）
+     * 使用 query 参数，避免 sys.upload.picWatermark 这类含点号键在 path 中被截断
+     */
+    @InnerAuth
+    @GetMapping(value = "/inner/configKey")
+    @Operation(summary = "内部-根据参数键名查询参数值")
+    public R<String> getConfigKeyInner(@RequestParam("configKey") String configKey) {
+        return R.ok(configService.selectConfigByKey(configKey));
     }
 
     /**

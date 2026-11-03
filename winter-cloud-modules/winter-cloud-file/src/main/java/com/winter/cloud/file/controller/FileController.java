@@ -9,6 +9,7 @@ import com.winter.cloud.common.core.web.domain.AjaxResult;
 import com.winter.cloud.common.core.web.page.TableDataInfo;
 import com.winter.cloud.file.domain.dto.FileDownloadZipInput;
 import com.winter.cloud.file.domain.dto.FileDownloadZipSpecifyNameInput;
+import com.winter.cloud.file.domain.dto.FileUploadInput;
 import com.winter.cloud.file.domain.entity.ResourceFile;
 import com.winter.cloud.file.service.IFileService;
 import com.winter.cloud.file.service.IResourceFileService;
@@ -102,17 +103,17 @@ public class FileController extends BaseController {
     }
 
     /**
-     * 文件上传请求
+     * 文件上传（对齐 portal CommonController：encrypt/watermark/module/fileMd5 等）
+     * Feign 仅传 file 时其余字段走默认值（encrypt=true，watermark 读系统参数）
      */
     @Operation(summary = "上传文件")
     @PostMapping("upload")
-    public R<SysFile> upload(MultipartFile file) {
+    public R<SysFile> upload(@Valid FileUploadInput input) {
         try {
-            // 上传并返回访问地址
-            String url = fileService.uploadFile(file);
+            ResourceFile resourceFile = fileService.uploadFile(input);
             SysFile sysFile = new SysFile();
-            sysFile.setName(FileUtils.getName(url));
-            sysFile.setUrl(url);
+            sysFile.setName(FileUtils.getName(resourceFile.getPath()));
+            sysFile.setUrl(resourceFile.getPath());
             return R.ok(sysFile);
         } catch (Exception e) {
             log.error("上传文件失败", e);
@@ -121,7 +122,7 @@ public class FileController extends BaseController {
     }
 
     /**
-     * 批量上传
+     * 批量上传（默认 encrypt/watermark 策略与单文件一致）
      */
     @Operation(summary = "批量上传文件")
     @PostMapping("uploads")
@@ -132,11 +133,13 @@ public class FileController extends BaseController {
             List<String> newFileNames = new ArrayList<>();
             List<String> originalFilenames = new ArrayList<>();
             for (MultipartFile file : files) {
-                String url = fileService.uploadFile(file);
-                urls.add(url);
-                fileNames.add(url);
-                newFileNames.add(FileUtils.getName(url));
-                originalFilenames.add(file.getOriginalFilename());
+                FileUploadInput input = new FileUploadInput();
+                input.setFile(file);
+                ResourceFile resourceFile = fileService.uploadFile(input);
+                urls.add(resourceFile.getPath());
+                fileNames.add(resourceFile.getRelativePath());
+                newFileNames.add(FileUtils.getName(resourceFile.getRelativePath()));
+                originalFilenames.add(resourceFile.getOriginName());
             }
             AjaxResult ajax = AjaxResult.success();
             ajax.put("urls", StringUtils.join(urls, Constants.ENGLISH_COMMA));

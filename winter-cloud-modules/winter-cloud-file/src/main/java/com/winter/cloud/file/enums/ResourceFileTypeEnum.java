@@ -27,6 +27,16 @@ public enum ResourceFileTypeEnum {
         return code;
     }
 
+    public static ResourceFileTypeEnum ofExtension(String extension) {
+        int code = resolveByExtension(extension);
+        for (ResourceFileTypeEnum item : values()) {
+            if (item.code == code) {
+                return item;
+            }
+        }
+        return OTHER;
+    }
+
     public static int resolveByExtension(String extension) {
         if (StringUtils.isEmpty(extension)) {
             return OTHER.code;

@@ -90,6 +90,12 @@
             <artifactId>okio</artifactId>
         </dependency>
 
+        <!-- ImageIO WebP 插件：对齐 paperless，支持 webp 读写与水印 -->
+        <dependency>
+            <groupId>org.sejda.imageio</groupId>
+            <artifactId>webp-imageio</artifactId>
+        </dependency>
+
         <!-- Redis：大文件分片分布式锁依赖 Redisson -->
         <dependency>
             <groupId>com.winter</groupId>

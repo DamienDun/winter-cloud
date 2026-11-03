@@ -1,6 +1,8 @@
 package com.winter.cloud.file.service;
 
+import com.winter.cloud.common.core.utils.DateUtils;
 import com.winter.cloud.common.core.utils.StringUtils;
+import com.winter.cloud.common.core.utils.file.FileTypeUtils;
 import com.winter.cloud.common.core.utils.file.FileUtils;
 import com.winter.cloud.common.core.utils.uuid.IdUtils;
 import com.winter.cloud.common.filestorage.FileObject;
@@ -8,12 +10,18 @@ import com.winter.cloud.common.filestorage.FileStorageObject;
 import com.winter.cloud.common.filestorage.StorageClient;
 import com.winter.cloud.common.filestorage.StorageClientContext;
 import com.winter.cloud.common.filestorage.properties.WinterStorageProperties;
-import com.winter.cloud.file.domain.entity.ResourceFile;
+import com.winter.cloud.file.client.FileDecryptCli;
 import com.winter.cloud.file.domain.dto.FileDownloadZipInput;
 import com.winter.cloud.file.domain.dto.FileDownloadZipSpecifyNameInput;
 import com.winter.cloud.file.domain.dto.FileNameVo;
+import com.winter.cloud.file.domain.dto.FileUploadInput;
+import com.winter.cloud.file.domain.entity.ResourceFile;
+import com.winter.cloud.file.enums.ResourceFileTypeEnum;
 import com.winter.cloud.file.utils.FileUploadUtils;
+import com.winter.cloud.file.utils.ImageWatermarkUtil;
+import com.winter.cloud.file.utils.SysConfigUtil;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,41 +53,102 @@ public class FileServiceImpl implements IFileService {
     private final StorageClientContext storageClientContext;
     private final WinterStorageProperties storageProperties;
     private final IResourceFileService resourceFileService;
+    private final FileDecryptCli fileDecryptCli;
 
     public FileServiceImpl(StorageClientContext storageClientContext,
-                                     WinterStorageProperties storageProperties,
-                                     IResourceFileService resourceFileService) {
+                           WinterStorageProperties storageProperties,
+                           IResourceFileService resourceFileService,
+                           FileDecryptCli fileDecryptCli) {
         this.storageClientContext = storageClientContext;
         this.storageProperties = storageProperties;
         this.resourceFileService = resourceFileService;
+        this.fileDecryptCli = fileDecryptCli;
     }
 
     @Override
-    public String uploadFile(MultipartFile file) throws Exception {
+    public ResourceFile uploadFile(FileUploadInput input) throws Exception {
+        if (input == null || input.getFile() == null || input.getFile().isEmpty()) {
+            throw new IllegalArgumentException("上传的文件不能为空");
+        }
+        MultipartFile file = input.getFile();
         StorageClient client = resolveClient();
-        String fileMd5;
-        try (InputStream md5Stream = file.getInputStream()) {
-            fileMd5 = DigestUtils.md5Hex(md5Stream);
+        String originName = file.getOriginalFilename();
+        String extension = FileTypeUtils.getExtension(file);
+        ResourceFileTypeEnum fileType = ResourceFileTypeEnum.ofExtension(extension);
+
+        String fileMd5 = input.getFileMd5();
+        if (StringUtils.isEmpty(fileMd5)) {
+            try (InputStream md5Stream = file.getInputStream()) {
+                fileMd5 = DigestUtils.md5Hex(md5Stream);
+            }
         }
 
-        // 相同 MD5：累加上传次数，直接返回已有访问地址，避免重复写对象存储
+        // 相同 MD5：累加上传次数与 module，避免重复写对象存储
         ResourceFile exist = resourceFileService.queryByFileMd5(fileMd5);
         if (exist != null && StringUtils.isNotEmpty(exist.getPath())) {
-            resourceFileService.saveUploadRecord(file, exist.getPath(), exist.getRelativePath(),
-                    client.getChannelId(), client.getDefaultBucketName(), fileMd5, exist.getLength());
-            return exist.getPath();
+            return resourceFileService.saveUploadRecord(file, exist.getPath(), exist.getRelativePath(),
+                    client.getChannelId(), client.getDefaultBucketName(), fileMd5, exist.getLength(), input.getModule());
         }
 
-        String objectName = FileUploadUtils.extractFilename(file);
-        try (InputStream inputStream = file.getInputStream()) {
+        InputStream inputStream = null;
+        try {
+            inputStream = file.getInputStream();
+            // 非图片且 encrypt=true：先解密（pdf/excel 等加密件）
+            if (input.isEncrypt() && fileType != ResourceFileTypeEnum.PIC) {
+                IOUtils.closeQuietly(inputStream);
+                inputStream = fileDecryptCli.decrypt(file);
+            }
+            // 图片：入参优先，未传则读系统参数 sys.upload.picWatermark
+            boolean needWatermark = input.getWatermark() != null
+                    ? input.getWatermark()
+                    : SysConfigUtil.sysUploadPicWatermark();
+            if (fileType == ResourceFileTypeEnum.PIC && needWatermark) {
+                InputStream watermarked = ImageWatermarkUtil.addWatermark(inputStream, DateUtils.getTime(), extension);
+                IOUtils.closeQuietly(inputStream);
+                if (watermarked != null) {
+                    inputStream = watermarked;
+                } else {
+                    // 水印失败不阻断上传，回退原图
+                    log.warn("加水印失败，回退原图上传, name={}", originName);
+                    inputStream = file.getInputStream();
+                }
+            }
+
+            String objectName = resolveObjectName(input, file, extension);
             FileObject fileObject = client.saveFile(client.getDefaultBucketName(), objectName, inputStream);
             log.info("文件上传成功[channel={}]: {}", client.getChannelId(), fileObject);
             String relativePath = fileObject.getUrl();
             Long length = fileObject.getFileInfo() == null ? file.getSize() : fileObject.getFileInfo().getLength();
-            resourceFileService.saveUploadRecord(file, fileObject.getAccessUrl(), relativePath,
-                    client.getChannelId(), client.getDefaultBucketName(), fileMd5, length);
-            return fileObject.getAccessUrl();
+            return resourceFileService.saveUploadRecord(file, fileObject.getAccessUrl(), relativePath,
+                    client.getChannelId(), client.getDefaultBucketName(), fileMd5, length, input.getModule());
+        } finally {
+            IOUtils.closeQuietly(inputStream);
         }
+    }
+
+    private String resolveObjectName(FileUploadInput input, MultipartFile file, String extension) {
+        if (StringUtils.isNotEmpty(input.getUploadFolderPath()) || StringUtils.isNotEmpty(input.getUploadFileName())) {
+            String folder = StringUtils.isEmpty(input.getUploadFolderPath())
+                    ? DateUtils.datePath() + "/"
+                    : composeFolderPath(input.getUploadFolderPath());
+            String name = StringUtils.isNotEmpty(input.getUploadFileName())
+                    ? input.getUploadFileName()
+                    : FilenameUtils.getBaseName(file.getOriginalFilename()) + "_" + IdUtils.fastSimpleUUID();
+            return folder + name + "." + extension;
+        }
+        return FileUploadUtils.extractFilename(file);
+    }
+
+    private String composeFolderPath(String uploadFolderPath) {
+        String path = uploadFolderPath.replace("\\", "/");
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        if (!path.endsWith("/")) {
+            path = path + "/";
+        }
+        // 对象存储 key 通常不需要前导 /
+        return StringUtils.removeStart(path, "/");
     }
 
     @Override

@@ -33,8 +33,16 @@ public interface IResourceFileService {
     /**
      * 保存或累加上传次数（相同 MD5 不重复占存储时更新次数）
      */
+    default ResourceFile saveUploadRecord(MultipartFile file, String accessUrl, String relativePath,
+                                          String channelId, String bucketName, String fileMd5, Long length) {
+        return saveUploadRecord(file, accessUrl, relativePath, channelId, bucketName, fileMd5, length, null);
+    }
+
+    /**
+     * 保存或累加上传次数，并合并 module
+     */
     ResourceFile saveUploadRecord(MultipartFile file, String accessUrl, String relativePath,
-                                  String channelId, String bucketName, String fileMd5, Long length);
+                                  String channelId, String bucketName, String fileMd5, Long length, String module);
 
     /**
      * 按路径删除记录

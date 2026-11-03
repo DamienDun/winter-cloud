@@ -64,6 +64,15 @@ CREATE TABLE IF NOT EXISTS `fs_resource_file` (
 --   ADD KEY `idx_is_deleted` (`is_deleted`);
 
 -- ----------------------------
+-- 系统参数：图片上传是否默认加水印（文件服务 SysConfigUtil.sysUploadPicWatermark）
+-- 执行后请在「参数设置」点刷新缓存，或重启 winter-system
+-- ----------------------------
+INSERT INTO sys_config (config_name, config_key, config_value, config_type, create_by, create_time, remark)
+SELECT '文件上传-图片日期水印', 'sys.upload.picWatermark', 'true', 'Y', 'admin', sysdate(), 'true开启/false关闭；未配置时默认开启'
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_config WHERE config_key = 'sys.upload.picWatermark');
+
+-- ----------------------------
 -- 文件管理菜单（前端已挂 constantRoutes，以下供动态菜单/权限同步可选执行）
 -- ----------------------------
 -- INSERT INTO sys_menu VALUES('2000', '文件管理', '0', '5', 'file', null, '', '', 1, 0, 'M', '0', '0', '', 'upload', 'admin', sysdate(), '', null, '文件管理目录');

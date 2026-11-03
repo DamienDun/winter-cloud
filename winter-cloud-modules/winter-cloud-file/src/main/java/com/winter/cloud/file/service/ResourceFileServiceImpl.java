@@ -3,6 +3,7 @@ package com.winter.cloud.file.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.winter.cloud.common.core.constant.Constants;
 import com.winter.cloud.common.core.context.SecurityContextHolder;
 import com.winter.cloud.common.core.enums.CommonEnum;
 import com.winter.cloud.common.core.utils.DateUtils;
@@ -14,8 +15,11 @@ import com.winter.cloud.file.mapper.ResourceFileMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Arrays;
 import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 资源文件上传记录服务
@@ -76,7 +80,8 @@ public class ResourceFileServiceImpl implements IResourceFileService {
 
     @Override
     public ResourceFile saveUploadRecord(MultipartFile file, String accessUrl, String relativePath,
-                                         String channelId, String bucketName, String fileMd5, Long length) {
+                                         String channelId, String bucketName, String fileMd5, Long length,
+                                         String module) {
         if (StringUtils.isNotEmpty(fileMd5)) {
             ResourceFile exist = queryByFileMd5(fileMd5);
             if (exist != null) {
@@ -85,6 +90,7 @@ public class ResourceFileServiceImpl implements IResourceFileService {
                 if (file != null && StringUtils.isNotEmpty(file.getOriginalFilename())) {
                     exist.setOriginName(file.getOriginalFilename());
                 }
+                exist.setModule(mergeModule(exist.getModule(), module));
                 // gmtModified / modifiedUserId 由 MetaObjectHandler 填充
                 resourceFileMapper.updateById(exist);
                 return exist;
@@ -103,9 +109,21 @@ public class ResourceFileServiceImpl implements IResourceFileService {
         entity.setApplyUploadCount(1);
         entity.setChannelId(channelId);
         entity.setBucketName(bucketName);
+        entity.setModule(module);
         // gmtCreate / createdUserId 等由 MetaObjectHandler 填充
         resourceFileMapper.insert(entity);
         return entity;
+    }
+
+    private String mergeModule(String existModule, String newModule) {
+        Set<String> moduleSet = new LinkedHashSet<>();
+        if (StringUtils.isNotEmpty(existModule)) {
+            moduleSet.addAll(Arrays.asList(existModule.split(Constants.ENGLISH_COMMA)));
+        }
+        if (StringUtils.isNotEmpty(newModule)) {
+            moduleSet.add(newModule);
+        }
+        return moduleSet.isEmpty() ? existModule : String.join(Constants.ENGLISH_COMMA, moduleSet);
     }
 
     @Override
