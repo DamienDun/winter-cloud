@@ -27,23 +27,63 @@ import java.util.Map;
  */
 public abstract class AbstractStorageClient<TBucket extends AbstractBucket> implements StorageClient {
 
-    private static final Map<String, TupleTwo<String, Integer>> EXTENSION_CONTENT_TYPE_MAP = new HashMap<>(16);
+    private static final Map<String, TupleTwo<String, Integer>> EXTENSION_CONTENT_TYPE_MAP = new HashMap<>(64);
 
     static {
-        EXTENSION_CONTENT_TYPE_MAP.put("jpg", new TupleTwo<>("image/jpg", 1));
+        // 图片
+        EXTENSION_CONTENT_TYPE_MAP.put("jpg", new TupleTwo<>("image/jpeg", 1));
+        EXTENSION_CONTENT_TYPE_MAP.put("jpeg", new TupleTwo<>("image/jpeg", 1));
         EXTENSION_CONTENT_TYPE_MAP.put("png", new TupleTwo<>("image/png", 1));
         EXTENSION_CONTENT_TYPE_MAP.put("bmp", new TupleTwo<>("image/bmp", 1));
-        EXTENSION_CONTENT_TYPE_MAP.put("tif", new TupleTwo<>("image/tif", 1));
         EXTENSION_CONTENT_TYPE_MAP.put("gif", new TupleTwo<>("image/gif", 1));
-        EXTENSION_CONTENT_TYPE_MAP.put("jpeg", new TupleTwo<>("image/jpeg", 1));
+        EXTENSION_CONTENT_TYPE_MAP.put("tif", new TupleTwo<>("image/tiff", 1));
         EXTENSION_CONTENT_TYPE_MAP.put("tiff", new TupleTwo<>("image/tiff", 1));
-        EXTENSION_CONTENT_TYPE_MAP.put("dib", new TupleTwo<>("image/dib", 1));
+        EXTENSION_CONTENT_TYPE_MAP.put("dib", new TupleTwo<>("image/bmp", 1));
+        EXTENSION_CONTENT_TYPE_MAP.put("webp", new TupleTwo<>("image/webp", 1));
+        EXTENSION_CONTENT_TYPE_MAP.put("svg", new TupleTwo<>("image/svg+xml", 1));
+        EXTENSION_CONTENT_TYPE_MAP.put("ico", new TupleTwo<>("image/x-icon", 1));
+        EXTENSION_CONTENT_TYPE_MAP.put("heic", new TupleTwo<>("image/heic", 1));
+        EXTENSION_CONTENT_TYPE_MAP.put("heif", new TupleTwo<>("image/heif", 1));
+        // 文本 / 网页
         EXTENSION_CONTENT_TYPE_MAP.put("html", new TupleTwo<>("text/html", 2));
+        EXTENSION_CONTENT_TYPE_MAP.put("htm", new TupleTwo<>("text/html", 2));
         EXTENSION_CONTENT_TYPE_MAP.put("xml", new TupleTwo<>("text/xml", 2));
         EXTENSION_CONTENT_TYPE_MAP.put("plain", new TupleTwo<>("text/plain", 2));
         EXTENSION_CONTENT_TYPE_MAP.put("txt", new TupleTwo<>("text/plain", 2));
+        EXTENSION_CONTENT_TYPE_MAP.put("md", new TupleTwo<>("text/markdown", 2));
+        EXTENSION_CONTENT_TYPE_MAP.put("csv", new TupleTwo<>("text/csv", 2));
         EXTENSION_CONTENT_TYPE_MAP.put("json", new TupleTwo<>("application/json", 3));
         EXTENSION_CONTENT_TYPE_MAP.put("pdf", new TupleTwo<>("application/pdf", 4));
+        // 音视频（缺映射时会落成 application/octet-stream，叠加 nosniff 会导致播放器黑屏）
+        EXTENSION_CONTENT_TYPE_MAP.put("mp4", new TupleTwo<>("video/mp4", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("webm", new TupleTwo<>("video/webm", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("ogg", new TupleTwo<>("video/ogg", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("ogv", new TupleTwo<>("video/ogg", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("mov", new TupleTwo<>("video/quicktime", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("m4v", new TupleTwo<>("video/x-m4v", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("avi", new TupleTwo<>("video/x-msvideo", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("mkv", new TupleTwo<>("video/x-matroska", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("flv", new TupleTwo<>("video/x-flv", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("wmv", new TupleTwo<>("video/x-ms-wmv", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("mpeg", new TupleTwo<>("video/mpeg", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("mpg", new TupleTwo<>("video/mpeg", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("3gp", new TupleTwo<>("video/3gpp", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("ts", new TupleTwo<>("video/mp2t", 5));
+        EXTENSION_CONTENT_TYPE_MAP.put("mp3", new TupleTwo<>("audio/mpeg", 6));
+        EXTENSION_CONTENT_TYPE_MAP.put("wav", new TupleTwo<>("audio/wav", 6));
+        EXTENSION_CONTENT_TYPE_MAP.put("flac", new TupleTwo<>("audio/flac", 6));
+        EXTENSION_CONTENT_TYPE_MAP.put("aac", new TupleTwo<>("audio/aac", 6));
+        EXTENSION_CONTENT_TYPE_MAP.put("m4a", new TupleTwo<>("audio/mp4", 6));
+        EXTENSION_CONTENT_TYPE_MAP.put("wma", new TupleTwo<>("audio/x-ms-wma", 6));
+        EXTENSION_CONTENT_TYPE_MAP.put("opus", new TupleTwo<>("audio/opus", 6));
+        EXTENSION_CONTENT_TYPE_MAP.put("amr", new TupleTwo<>("audio/amr", 6));
+        // 办公常见
+        EXTENSION_CONTENT_TYPE_MAP.put("doc", new TupleTwo<>("application/msword", 7));
+        EXTENSION_CONTENT_TYPE_MAP.put("docx", new TupleTwo<>("application/vnd.openxmlformats-officedocument.wordprocessingml.document", 7));
+        EXTENSION_CONTENT_TYPE_MAP.put("xls", new TupleTwo<>("application/vnd.ms-excel", 7));
+        EXTENSION_CONTENT_TYPE_MAP.put("xlsx", new TupleTwo<>("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 7));
+        EXTENSION_CONTENT_TYPE_MAP.put("ppt", new TupleTwo<>("application/vnd.ms-powerpoint", 7));
+        EXTENSION_CONTENT_TYPE_MAP.put("pptx", new TupleTwo<>("application/vnd.openxmlformats-officedocument.presentationml.presentation", 7));
     }
 
     /**
