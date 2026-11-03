@@ -65,6 +65,12 @@
             <artifactId>winter-cloud-common-mybatis</artifactId>
         </dependency>
 
+        <!-- HeaderInterceptor：把网关传入的 user_id 写入 SecurityContext，供审计填充 -->
+        <dependency>
+            <groupId>com.winter</groupId>
+            <artifactId>winter-cloud-common-security</artifactId>
+        </dependency>
+
         <!-- 统一对象存储；云厂商 SDK 在 file-storage 中为 optional，此处按需引入 -->
         <dependency>
             <groupId>com.winter</groupId>

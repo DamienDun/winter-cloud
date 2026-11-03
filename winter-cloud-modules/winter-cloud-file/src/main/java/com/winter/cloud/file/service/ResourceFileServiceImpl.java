@@ -1,7 +1,11 @@
 package com.winter.cloud.file.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.winter.cloud.common.core.context.SecurityContextHolder;
+import com.winter.cloud.common.core.enums.CommonEnum;
+import com.winter.cloud.common.core.utils.DateUtils;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.core.utils.file.FileTypeUtils;
 import com.winter.cloud.file.domain.entity.ResourceFile;
@@ -10,6 +14,7 @@ import com.winter.cloud.file.mapper.ResourceFileMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -108,10 +113,12 @@ public class ResourceFileServiceImpl implements IResourceFileService {
         if (StringUtils.isEmpty(path)) {
             return;
         }
-        // 逻辑删除：按实体删除以便触发审计填充
         LambdaQueryWrapper<ResourceFile> wrapper = Wrappers.lambdaQuery(ResourceFile.class);
         wrapper.eq(ResourceFile::getPath, path).or().eq(ResourceFile::getRelativePath, path);
-        resourceFileMapper.delete(wrapper);
+        List<ResourceFile> list = resourceFileMapper.selectList(wrapper);
+        for (ResourceFile item : list) {
+            logicDelete(item.getId());
+        }
     }
 
     @Override
@@ -121,12 +128,32 @@ public class ResourceFileServiceImpl implements IResourceFileService {
         }
         int rows = 0;
         for (Long id : ids) {
-            if (id == null) {
-                continue;
-            }
-            // 逐条删除以触发逻辑删除审计填充
-            rows += resourceFileMapper.deleteById(id);
+            rows += logicDelete(id);
         }
         return rows;
+    }
+
+    /**
+     * 逻辑删除并显式填充删除时间/删除人。
+     * 说明：deleteById(Long) 生成的逻辑删除 SQL 不会带 FieldFill.UPDATE 字段，
+     * 因此这里用 UpdateWrapper 直接写 is_deleted / gmt_delete / deleted_user_id。
+     */
+    private int logicDelete(Long id) {
+        if (id == null) {
+            return 0;
+        }
+        Date now = DateUtils.getNowDate();
+        Long userId = SecurityContextHolder.getUserId();
+        LambdaUpdateWrapper<ResourceFile> uw = Wrappers.lambdaUpdate();
+        uw.eq(ResourceFile::getId, id)
+            .eq(ResourceFile::getDeleted, CommonEnum.Deleted.FALSE.getCode())
+            .set(ResourceFile::getDeleted, CommonEnum.Deleted.TRUE.getCode())
+            .set(ResourceFile::getGmtDelete, now)
+            .set(ResourceFile::getGmtModified, now);
+        if (userId != null) {
+            uw.set(ResourceFile::getDeletedUserId, userId)
+                .set(ResourceFile::getModifiedUserId, userId);
+        }
+        return resourceFileMapper.update(null, uw);
     }
 }
