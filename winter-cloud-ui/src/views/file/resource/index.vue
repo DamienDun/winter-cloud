@@ -57,6 +57,11 @@
           <span>{{ parseTime(scope.row.gmtCreate) }}</span>
         </template>
       </el-table-column>
+      <el-table-column label="修改时间" align="center" prop="gmtModified" width="160">
+        <template slot-scope="scope">
+          <span>{{ parseTime(scope.row.gmtModified) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" align="center" width="200" class-name="small-padding fixed-width">
         <template slot-scope="scope">
           <el-button
