@@ -43,3 +43,15 @@ INSERT INTO sys_role_menu VALUES ('1', '2103');
 INSERT INTO sys_role_menu VALUES ('1', '2104');
 INSERT INTO sys_role_menu VALUES ('1', '2105');
 INSERT INTO sys_role_menu VALUES ('1', '2106');
+
+-- 表数据维护（挂数据源管理目录）
+INSERT INTO sys_menu VALUES('2110', '表数据维护', '2100', '2', 'table', 'datasource/table/index', '', '', 1, 0, 'C', '0', '0', 'datasource:data:list', 'table', 'admin', sysdate(), '', null, '远程库表数据 CRUD');
+INSERT INTO sys_menu VALUES('2111', '表数据查询', '2110', '1', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:data:query', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_menu VALUES('2112', '表数据新增', '2110', '2', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:data:add', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_menu VALUES('2113', '表数据修改', '2110', '3', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:data:edit', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_menu VALUES('2114', '表数据删除', '2110', '4', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:data:remove', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_role_menu VALUES ('1', '2110');
+INSERT INTO sys_role_menu VALUES ('1', '2111');
+INSERT INTO sys_role_menu VALUES ('1', '2112');
+INSERT INTO sys_role_menu VALUES ('1', '2113');
+INSERT INTO sys_role_menu VALUES ('1', '2114');

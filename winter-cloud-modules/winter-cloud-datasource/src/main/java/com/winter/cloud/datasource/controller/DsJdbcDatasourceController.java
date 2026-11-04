@@ -6,6 +6,7 @@ import com.winter.cloud.common.core.web.domain.AjaxResult;
 import com.winter.cloud.common.core.web.page.TableDataInfo;
 import com.winter.cloud.common.log.annotation.Log;
 import com.winter.cloud.common.log.enums.BusinessType;
+import com.winter.cloud.common.security.annotation.Logical;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.datasource.domain.entity.DsJdbcDatasource;
 import com.winter.cloud.datasource.service.IDsJdbcDatasourceService;
@@ -47,7 +48,7 @@ public class DsJdbcDatasourceController extends BaseController {
         return success(datasourceService.selectById(id));
     }
 
-    @RequiresPermissions("datasource:info:list")
+    @RequiresPermissions(value = {"datasource:info:list", "datasource:data:list"}, logical = Logical.OR)
     @GetMapping("/all")
     @Operation(summary = "启用中的全部数据源（下拉）")
     public AjaxResult all() {
