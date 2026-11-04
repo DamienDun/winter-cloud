@@ -123,8 +123,8 @@
     </el-row>
     <el-empty v-else description="请先选择数据源" />
 
-    <el-dialog :title="title" :visible.sync="open" width="640px" append-to-body>
-      <el-form ref="form" :model="form" label-width="120px" size="small">
+    <el-dialog :title="title" :visible.sync="open" width="960px" append-to-body custom-class="ds-table-row-dialog">
+      <el-form ref="form" :model="form" :label-width="formLabelWidth" size="small" class="ds-table-row-form">
         <el-form-item v-for="col in columns" :key="col.name" :label="colLabel(col)">
           <el-input
             v-model="form[col.name]"
@@ -172,6 +172,20 @@ export default {
     }
   },
   computed: {
+    // dynamic label width to avoid wrap
+    formLabelWidth() {
+      let max = 8
+      ;(this.columns || []).forEach(col => {
+        const label = this.colLabel(col) || ""
+        let w = 0
+        for (const ch of label) {
+          w += ch.charCodeAt(0) > 255 ? 2 : 1
+        }
+        if (w > max) max = w
+      })
+      const px = Math.min(420, Math.max(160, max * 8 + 24))
+      return px + "px"
+    },
     filteredTables() {
       return this.tables || []
     },
