@@ -35,7 +35,21 @@
           文本无法直接读取（可能跨域），请新窗口打开
         </div>
       </div>
-      <!-- Office / 其他：不强制伪造在线预览 -->
+      <!-- Office：docx / xlsx 前端解析预览 -->
+      <div v-else-if="kind === 'office'" class="preview-office">
+        <el-skeleton v-if="officeLoading" :rows="10" animated />
+        <div v-else-if="officeError" class="preview-fallback">
+          <p>{{ officeError }}</p>
+          <p class="preview-name">{{ displayName }}</p>
+        </div>
+        <div v-show="!officeLoading && !officeError && officeSubKind === 'docx'" ref="docxContainer" class="preview-docx" />
+        <div
+          v-show="!officeLoading && !officeError && officeSubKind === 'excel'"
+          class="preview-excel"
+          v-html="excelHtml"
+        />
+      </div>
+      <!-- 其他 -->
       <div v-else class="preview-fallback">
         <p>当前类型不支持页内预览，请新窗口打开或下载后查看。</p>
         <p class="preview-name">{{ displayName }}</p>
@@ -52,6 +66,7 @@
 /**
  * 通用文件预览弹窗。
  * fileType 可为 ResourceFileTypeEnum 数字码，或扩展名/MIME 字符串。
+ * Office：从 public/libs 动态加载 docx-preview / xlsx（避免 npm+webpack4 解析失败）；旧版 doc/ppt 外开。
  */
 const TYPE_CODE_MAP = {
   1: 'image',
@@ -74,7 +89,11 @@ export default {
       fileName: '',
       fileType: undefined,
       txtLoading: false,
-      txtContent: null
+      txtContent: null,
+      officeLoading: false,
+      officeError: null,
+      officeSubKind: '',
+      excelHtml: ''
     }
   },
   computed: {
@@ -88,13 +107,26 @@ export default {
       return this.displayName !== '-' ? ('预览 - ' + this.displayName) : '文件预览'
     },
     dialogWidth() {
-      if (this.kind === 'image' || this.kind === 'video' || this.kind === 'pdf' || this.kind === 'html') {
+      if (this.kind === 'image' || this.kind === 'video' || this.kind === 'pdf' || this.kind === 'html' || this.kind === 'office') {
         return '80%'
       }
       if (this.kind === 'audio') {
         return '520px'
       }
       return '640px'
+    },
+    fileExt() {
+      const name = this.fileName || this.pickNameFromUrl(this.url) || ''
+      if (name.includes('.')) {
+        return name.split('.').pop().toLowerCase()
+      }
+      if (this.fileType !== undefined && this.fileType !== null && this.fileType !== '') {
+        const token = String(this.fileType).toLowerCase().replace(/^\./, '')
+        if (/^[a-z0-9]+$/.test(token) && TYPE_CODE_MAP[this.fileType] === undefined) {
+          return token
+        }
+      }
+      return ''
     }
   },
   methods: {
@@ -112,10 +144,15 @@ export default {
       this.fileName = options.fileName || ''
       this.fileType = options.fileType
       this.txtContent = null
+      this.officeError = null
+      this.officeSubKind = ''
+      this.excelHtml = ''
       this.visible = true
       this.$nextTick(() => {
         if (this.kind === 'txt') {
           this.loadText()
+        } else if (this.kind === 'office') {
+          this.loadOffice()
         }
       })
     },
@@ -163,7 +200,6 @@ export default {
           return res.text()
         })
         .then(text => {
-          // 过大文本截断，避免弹窗卡死
           this.txtContent = text.length > 200000 ? text.slice(0, 200000) + '\n\n...内容过长已截断' : text
         })
         .catch(() => {
@@ -172,6 +208,100 @@ export default {
         .finally(() => {
           this.txtLoading = false
         })
+    },
+
+    loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const existed = document.querySelector('script[data-preview-lib="' + src + '"]')
+        if (existed) {
+          resolve()
+          return
+        }
+        const script = document.createElement('script')
+        script.src = src
+        script.async = true
+        script.setAttribute('data-preview-lib', src)
+        script.onload = () => resolve()
+        script.onerror = () => reject(new Error('脚本加载失败: ' + src))
+        document.head.appendChild(script)
+      })
+    },
+    async ensureOfficeLibs(kind) {
+      const base = (process.env.BASE_URL || '/').replace(/\/?$/, '/')
+      if (kind === 'docx') {
+        if (!window.JSZip) {
+          await this.loadScript(base + 'libs/jszip.min.js')
+        }
+        if (!window.docx || !window.docx.renderAsync) {
+          await this.loadScript(base + 'libs/docx-preview.min.js')
+        }
+        return
+      }
+      if (kind === 'excel') {
+        if (!window.XLSX) {
+          await this.loadScript(base + 'libs/xlsx.full.min.js')
+        }
+      }
+    },
+    async loadOffice() {
+      this.officeLoading = true
+      this.officeError = null
+      this.excelHtml = ''
+      this.officeSubKind = ''
+      const ext = this.fileExt
+      // 旧版二进制格式与 PPT 无法在浏览器内可靠解析
+      if (/^(doc|ppt|pptx|rtf|odt|ods|odp|wps|et|dps)$/.test(ext)) {
+        this.officeError = '当前格式暂不支持页内预览，请新窗口打开或下载后查看（docx/xlsx/xls/csv 可页内预览）。'
+        this.officeLoading = false
+        return
+      }
+      try {
+        const res = await fetch(this.url)
+        if (!res.ok) {
+          throw new Error('文件拉取失败 HTTP ' + res.status)
+        }
+        const buffer = await res.arrayBuffer()
+        if (ext === 'docx' || this.fileType === 5) {
+          this.officeSubKind = 'docx'
+          await this.$nextTick()
+          const container = this.$refs.docxContainer
+          if (container) {
+            container.innerHTML = ''
+          }
+          await this.ensureOfficeLibs('docx')
+          await window.docx.renderAsync(buffer, container, null, {
+            className: 'docx-preview-body',
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            breakPages: true
+          })
+        } else if (/^(xls|xlsx|xlsm|csv)$/.test(ext) || this.fileType === 6) {
+          this.officeSubKind = 'excel'
+          await this.ensureOfficeLibs('excel')
+          const XLSX = window.XLSX
+          const workbook = XLSX.read(buffer, { type: 'array' })
+          const sheetName = workbook.SheetNames[0]
+          if (!sheetName) {
+            throw new Error('工作簿为空')
+          }
+          // 多 sheet 时拼接展示，避免只能看第一页
+          const parts = workbook.SheetNames.map(name => {
+            const sheet = workbook.Sheets[name]
+            const html = XLSX.utils.sheet_to_html(sheet, { header: '', footer: '' })
+            return '<h4 class="excel-sheet-title">' + name + '</h4>' + html
+          })
+          this.excelHtml = parts.join('')
+        } else {
+          this.officeError = '无法识别的 Office 扩展名：' + (ext || '-') + '，请新窗口打开。'
+        }
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e)
+        // 跨域时浏览器会拦 fetch，提示走外开
+        this.officeError = '页内预览失败（' + msg + '）。若为跨域，请配置对象存储 CORS 或使用「新窗口打开」。'
+      } finally {
+        this.officeLoading = false
+      }
     },
     openExternal() {
       if (this.url) {
@@ -184,6 +314,13 @@ export default {
       this.fileType = undefined
       this.txtContent = null
       this.txtLoading = false
+      this.officeLoading = false
+      this.officeError = null
+      this.officeSubKind = ''
+      this.excelHtml = ''
+      if (this.$refs.docxContainer) {
+        this.$refs.docxContainer.innerHTML = ''
+      }
     }
   }
 }
@@ -240,6 +377,45 @@ export default {
     font-size: 13px;
     line-height: 1.5;
     color: #303133;
+  }
+}
+.preview-office {
+  min-height: 200px;
+}
+.preview-docx,
+.preview-excel {
+  max-height: 70vh;
+  overflow: auto;
+  background: #f5f7fa;
+  padding: 12px;
+}
+.preview-excel {
+  ::v-deep table {
+    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+    background: #fff;
+  }
+  ::v-deep td,
+  ::v-deep th {
+    border: 1px solid #dcdfe6;
+    padding: 4px 8px;
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+  ::v-deep .excel-sheet-title {
+    margin: 12px 0 8px;
+    color: #303133;
+  }
+}
+.preview-docx {
+  ::v-deep .docx-wrapper {
+    background: transparent;
+    padding: 0;
+  }
+  ::v-deep .docx-wrapper > section.docx {
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   }
 }
 </style>
