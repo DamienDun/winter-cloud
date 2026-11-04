@@ -1,6 +1,6 @@
 package com.winter.cloud.common.datasource.enums;
 
-import com.winter.cloud.common.datasource.enums.BaseResultEnum;
+import com.winter.cloud.common.core.enums.BaseResultEnum;
 
 /**
  * <p>

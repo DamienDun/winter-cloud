@@ -1,7 +1,7 @@
 package com.winter.cloud.common.datasource.exception;
 
 import com.winter.cloud.common.core.constant.Constants;
-import com.winter.cloud.common.datasource.enums.BaseResultEnum;
+import com.winter.cloud.common.core.enums.BaseResultEnum;
 
 /**
  * 数据源类型异常
