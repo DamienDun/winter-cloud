@@ -13,6 +13,7 @@
         <module>winter-cloud-gen</module>
         <module>winter-cloud-job</module>
         <module>winter-cloud-file</module>
+        <module>winter-cloud-datasource</module>
     </modules>
 
     <artifactId>winter-cloud-modules</artifactId>

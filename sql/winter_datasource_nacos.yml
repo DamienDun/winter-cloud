@@ -1,0 +1,65 @@
+# Copy to Nacos: dataId=winter-datasource-dev.yml, group=DEFAULT_GROUP
+# Merge gateway route into winter-gateway-dev.yml:
+# - id: winter-datasource
+#   uri: lb://winter-datasource
+#   predicates:
+#     - Path=/datasource/**
+#   filters:
+#     - StripPrefix=1
+#
+# Publish body should be ASCII/UTF-8. Prefer publishing from "spring:" downward.
+
+spring:
+  redis:
+    host: 10.36.23.78
+    port: 6380
+    password: Redis@2022
+    database: 4
+  datasource:
+    druid:
+      stat-view-servlet:
+        enabled: true
+        loginUsername: winter
+        loginPassword: 123456
+    dynamic:
+      druid:
+        initial-size: 5
+        min-idle: 5
+        maxActive: 20
+        maxWait: 60000
+        connectTimeout: 30000
+        socketTimeout: 60000
+        timeBetweenEvictionRunsMillis: 60000
+        minEvictableIdleTimeMillis: 300000
+        validationQuery: SELECT 1 FROM DUAL
+        testWhileIdle: true
+        testOnBorrow: false
+        testOnReturn: false
+        poolPreparedStatements: true
+        maxPoolPreparedStatementPerConnectionSize: 20
+        filters: stat,slf4j
+        connectionProperties: druid.stat.mergeSql\=true;druid.stat.slowSqlMillis\=5000
+      datasource:
+        master:
+          driver-class-name: com.mysql.cj.jdbc.Driver
+          url: jdbc:mysql://localhost:13306/winter-cloud?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+          username: root
+          password: admin
+
+mybatis-plus:
+  type-aliases-package: com.winter.cloud.datasource.domain
+  mapper-locations: classpath*:mapper/**/*Mapper.xml
+  configuration:
+    cache-enabled: true
+    use-generated-keys: true
+    default-executor-type: simple
+
+springdoc:
+  gatewayUrl: http://localhost:8080/${spring.application.name}
+  api-docs:
+    enabled: true
+  info:
+    title: Datasource Admin API
+    description: JDBC datasource CRUD and connection test
+    contact:
+      name: Winter

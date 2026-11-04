@@ -179,6 +179,11 @@ public interface Constants {
     String COLON = ":";
 
     /**
+     * 点号
+     */
+    String DOT = ".";
+
+    /**
      * 英文逗号
      */
     String ENGLISH_COMMA = ",";
