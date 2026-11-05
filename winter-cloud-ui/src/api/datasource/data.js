@@ -47,3 +47,59 @@ export function delRow(data) {
     data: data
   })
 }
+
+export function createTable(data) {
+  return request({
+    url: '/datasource/data/schema/table',
+    method: 'post',
+    data: data
+  })
+}
+
+export function dropTable(data) {
+  return request({
+    url: '/datasource/data/schema/table',
+    method: 'delete',
+    data: data
+  })
+}
+
+export function alterColumn(data) {
+  return request({
+    url: '/datasource/data/schema/column',
+    method: 'post',
+    data: data
+  })
+}
+
+export function listIndexes(query) {
+  return request({
+    url: '/datasource/data/schema/indexes',
+    method: 'get',
+    params: query
+  })
+}
+
+export function createIndex(data) {
+  return request({
+    url: '/datasource/data/schema/index',
+    method: 'post',
+    data: data
+  })
+}
+
+export function updateIndex(data) {
+  return request({
+    url: '/datasource/data/schema/index',
+    method: 'put',
+    data: data
+  })
+}
+
+export function dropIndex(data) {
+  return request({
+    url: '/datasource/data/schema/index',
+    method: 'delete',
+    data: data
+  })
+}

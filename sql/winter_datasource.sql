@@ -55,3 +55,13 @@ INSERT INTO sys_role_menu VALUES ('1', '2111');
 INSERT INTO sys_role_menu VALUES ('1', '2112');
 INSERT INTO sys_role_menu VALUES ('1', '2113');
 INSERT INTO sys_role_menu VALUES ('1', '2114');
+
+-- 表结构 DDL 权限（挂在表数据维护 2110 下）
+INSERT INTO sys_menu VALUES('2120', '表结构查询', '2110', '10', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:schema:list', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_menu VALUES('2121', '建表', '2110', '11', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:schema:add', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_menu VALUES('2122', '改字段/索引', '2110', '12', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:schema:edit', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_menu VALUES('2123', '删表', '2110', '13', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:schema:remove', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_role_menu VALUES ('1', '2120');
+INSERT INTO sys_role_menu VALUES ('1', '2121');
+INSERT INTO sys_role_menu VALUES ('1', '2122');
+INSERT INTO sys_role_menu VALUES ('1', '2123');
