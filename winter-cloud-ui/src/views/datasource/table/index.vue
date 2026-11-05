@@ -156,7 +156,8 @@
     <!-- 索引管理 -->
     <el-dialog :title="'索引管理 - ' + currentTable" :visible.sync="indexOpen" width="900px" append-to-body>
       <el-row :gutter="10" class="mb8">
-        <el-col :span="1.5"><el-button type="primary" plain size="mini" icon="el-icon-plus" @click="openCreateIndex">添加索引</el-button></el-col>
+        <el-col :span="1.5"><el-button type="primary" plain size="mini" icon="el-icon-plus" :disabled="!(ddlCapabilities.indexTypes || []).length" @click="openCreateIndex">添加索引</el-button></el-col>
+        <el-col :span="8" v-if="!(ddlCapabilities.indexTypes || []).length"><span style="color:#909399;font-size:12px;line-height:28px">当前方言不支持二级索引（Hive/Presto）</span></el-col>
         <el-col :span="1.5"><el-button size="mini" icon="el-icon-refresh" @click="loadIndexes">刷新</el-button></el-col>
       </el-row>
       <el-table :data="indexList" border size="mini" v-loading="indexLoading">
@@ -186,20 +187,16 @@
         </el-form-item>
         <el-form-item label="索引类型" required>
           <el-select v-model="indexForm.indexType" style="width:100%" @change="onIndexTypeChange">
-            <el-option label="NORMAL" value="NORMAL" />
-            <el-option label="UNIQUE" value="UNIQUE" />
-            <el-option label="FULLTEXT" value="FULLTEXT" />
-            <el-option label="SPATIAL" value="SPATIAL" />
+            <el-option v-for="tp in (ddlCapabilities.indexTypes || [])" :key="tp" :label="tp" :value="tp" />
           </el-select>
         </el-form-item>
-        <el-form-item label="索引方法">
-          <el-select v-model="indexForm.indexMethod" style="width:100%" :disabled="indexMethodDisabled" clearable placeholder="BTREE / HASH">
-            <el-option label="BTREE" value="BTREE" />
-            <el-option label="HASH" value="HASH" />
+        <el-form-item label="索引方法" v-if="(ddlCapabilities.indexMethods || []).length">
+          <el-select v-model="indexForm.indexMethod" style="width:100%" :disabled="indexMethodDisabled" clearable placeholder="选择方法">
+            <el-option v-for="m in (ddlCapabilities.indexMethods || [])" :key="m" :label="m" :value="m" />
           </el-select>
         </el-form-item>
-        <el-form-item label="注释">
-          <el-input v-model="indexForm.comment" type="textarea" :rows="2" placeholder="索引注释" />
+        <el-form-item label="注释" v-if="ddlCapabilities.supportsIndexComment">
+          <el-input v-model="indexForm.comment" type="textarea" :rows="2" placeholder="索引注释（当前方言支持）" />
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
@@ -212,7 +209,7 @@
 
 <script>
 import { listAllDatasource } from '@/api/datasource/info'
-import { listTables, listColumns, listRows, addRow, updateRow, delRow, createTable, dropTable, alterColumn, listIndexes, createIndex, updateIndex, dropIndex } from '@/api/datasource/data'
+import { listTables, listColumns, listRows, addRow, updateRow, delRow, createTable, dropTable, alterColumn, listIndexes, schemaCapabilities, createIndex, updateIndex, dropIndex } from '@/api/datasource/data'
 
 export default {
   name: 'DatasourceTable',
@@ -250,7 +247,8 @@ export default {
       indexDlgOpen: false,
       indexDlgTitle: '添加索引',
       indexEditing: false,
-      indexForm: { indexName: '', oldIndexName: '', indexType: 'NORMAL', indexMethod: 'BTREE', comment: '', columns: [] }
+      indexForm: { indexName: '', oldIndexName: '', indexType: 'NORMAL', indexMethod: 'BTREE', comment: '', columns: [] },
+      ddlCapabilities: { dialect: '', indexTypes: ['NORMAL','UNIQUE'], indexMethods: ['BTREE'], supportsIndexComment: false }
     }
   },
   computed: {
@@ -283,7 +281,22 @@ export default {
       this.dataList = []
       this.total = 0
       this.tables = []
-      if (this.datasourceId) this.loadTables()
+      this.ddlCapabilities = { dialect: '', indexTypes: ['NORMAL','UNIQUE'], indexMethods: ['BTREE'], supportsIndexComment: false }
+      if (this.datasourceId) {
+        this.loadTables()
+        this.loadCapabilities()
+      }
+    },
+    loadCapabilities() {
+      if (!this.datasourceId) return
+      schemaCapabilities({ datasourceId: this.datasourceId }).then(res => {
+        this.ddlCapabilities = Object.assign({
+          dialect: '',
+          indexTypes: ['NORMAL', 'UNIQUE'],
+          indexMethods: ['BTREE'],
+          supportsIndexComment: false
+        }, res.data || {})
+      }).catch(() => {})
     },
     loadTables() {
       if (!this.datasourceId) return
@@ -475,6 +488,7 @@ export default {
     },
     openIndexMgr() {
       this.indexOpen = true
+      this.loadCapabilities()
       this.loadIndexes()
     },
     loadIndexes() {
@@ -485,9 +499,21 @@ export default {
       }).catch(() => { this.indexLoading = false })
     },
     openCreateIndex() {
+      const types = this.ddlCapabilities.indexTypes || []
+      if (!types.length) {
+        return this.$modal.msgWarning('当前数据源方言不支持索引管理')
+      }
       this.indexEditing = false
-      this.indexDlgTitle = '添加索引'
-      this.indexForm = { indexName: '', oldIndexName: '', indexType: 'NORMAL', indexMethod: 'BTREE', comment: '', columns: [] }
+      this.indexDlgTitle = '添加索引' + (this.ddlCapabilities.dialect ? ' (' + this.ddlCapabilities.dialect + ')' : '')
+      const methods = this.ddlCapabilities.indexMethods || []
+      this.indexForm = {
+        indexName: '',
+        oldIndexName: '',
+        indexType: types[0],
+        indexMethod: methods[0] || '',
+        comment: '',
+        columns: []
+      }
       this.indexDlgOpen = true
     },
     openEditIndex(row) {

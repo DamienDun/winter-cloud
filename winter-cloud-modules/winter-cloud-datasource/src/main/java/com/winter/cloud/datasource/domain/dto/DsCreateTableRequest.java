@@ -1,5 +1,6 @@
 package com.winter.cloud.datasource.domain.dto;
 
+import com.winter.cloud.common.datasource.ddl.model.DsColumnDef;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

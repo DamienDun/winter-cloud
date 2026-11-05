@@ -80,6 +80,14 @@ export function listIndexes(query) {
   })
 }
 
+export function schemaCapabilities(query) {
+  return request({
+    url: '/datasource/data/schema/capabilities',
+    method: 'get',
+    params: query
+  })
+}
+
 export function createIndex(data) {
   return request({
     url: '/datasource/data/schema/index',

@@ -5,10 +5,10 @@ import com.winter.cloud.common.core.web.domain.AjaxResult;
 import com.winter.cloud.common.log.annotation.Log;
 import com.winter.cloud.common.log.enums.BusinessType;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
+import com.winter.cloud.common.datasource.ddl.model.DsIndexRequest;
 import com.winter.cloud.datasource.domain.dto.DsAlterColumnRequest;
 import com.winter.cloud.datasource.domain.dto.DsCreateTableRequest;
 import com.winter.cloud.datasource.domain.dto.DsDropTableRequest;
-import com.winter.cloud.datasource.domain.dto.DsIndexRequest;
 import com.winter.cloud.datasource.service.IDsTableSchemaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -61,6 +61,17 @@ public class DsTableSchemaController extends BaseController {
         try {
             tableSchemaService.alterColumn(request);
             return success();
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
+    @RequiresPermissions("datasource:schema:list")
+    @GetMapping("/capabilities")
+    @Operation(summary = "DDL 能力（方言/索引类型）")
+    public AjaxResult capabilities(@RequestParam Long datasourceId) {
+        try {
+            return success(tableSchemaService.capabilities(datasourceId));
         } catch (Exception e) {
             return error(e.getMessage());
         }

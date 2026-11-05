@@ -1,9 +1,9 @@
 package com.winter.cloud.datasource.service;
 
+import com.winter.cloud.common.datasource.ddl.model.DsIndexRequest;
 import com.winter.cloud.datasource.domain.dto.DsAlterColumnRequest;
 import com.winter.cloud.datasource.domain.dto.DsCreateTableRequest;
 import com.winter.cloud.datasource.domain.dto.DsDropTableRequest;
-import com.winter.cloud.datasource.domain.dto.DsIndexRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -26,4 +26,6 @@ public interface IDsTableSchemaService {
     void dropIndex(DsIndexRequest request);
 
     List<Map<String, Object>> listIndexes(Long datasourceId, String tableName);
+
+    Map<String, Object> capabilities(Long datasourceId);
 }
