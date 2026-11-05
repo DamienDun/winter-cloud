@@ -65,3 +65,11 @@ INSERT INTO sys_role_menu VALUES ('1', '2120');
 INSERT INTO sys_role_menu VALUES ('1', '2121');
 INSERT INTO sys_role_menu VALUES ('1', '2122');
 INSERT INTO sys_role_menu VALUES ('1', '2123');
+
+-- SQL 查询权限（挂在表数据维护 2110 下，页面内「SQL查询」页签使用）
+INSERT INTO sys_menu VALUES('2131', 'SQL查询', '2110', '14', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:sql:query', '#', 'admin', sysdate(), '', null, '自定义只读 SQL 查询');
+INSERT INTO sys_role_menu VALUES ('1', '2131');
+
+-- 若曾插入独立菜单 2130，可清理：
+-- DELETE FROM sys_role_menu WHERE menu_id = 2130;
+-- DELETE FROM sys_menu WHERE menu_id IN (2130);

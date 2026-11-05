@@ -3,7 +3,7 @@ package com.winter.cloud.common.datasource.util;
 import com.winter.cloud.common.core.utils.StringUtils;
 
 /**
- * JDBC 标识符校验与按方言加引号
+ * JDBC identifier quote helper
  */
 public final class JdbcIdentUtils {
 
@@ -25,7 +25,7 @@ public final class JdbcIdentUtils {
         }
         String type = datasourceType == null ? "" : datasourceType.toLowerCase();
         if (type.contains("mysql") || type.contains("hive") || type.contains("clickhouse") || type.contains("mariadb")) {
-            return "" + n.replace("", "`") + "";
+            return "\u0060" + n.replace("\u0060", "\u0060\u0060") + "\u0060";
         }
         if (type.contains("sqlserver")) {
             return "[" + n.replace("]", "]]") + "]";

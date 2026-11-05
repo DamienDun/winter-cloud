@@ -6,65 +6,73 @@
           <el-option v-for="item in datasourceOptions" :key="item.id" :label="item.datasourceName + ' (' + item.datasourceType + ')'" :value="item.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="表名过滤">
+      <el-form-item label="表名过滤" v-if="workTab === 'table'">
         <el-input v-model="tableFilter" placeholder="关键字" clearable style="width: 180px" :disabled="!datasourceId" @keyup.enter.native="loadTables" />
       </el-form-item>
-      <el-form-item>
+      <el-form-item v-if="workTab === 'table'">
         <el-button type="primary" icon="el-icon-search" size="mini" :disabled="!datasourceId" @click="loadTables">刷新表</el-button>
         <el-button type="success" plain icon="el-icon-plus" size="mini" :disabled="!datasourceId" @click="openCreateTable" v-hasPermi="['datasource:schema:add']">建表</el-button>
       </el-form-item>
     </el-form>
 
-    <el-row :gutter="12" v-if="datasourceId">
-      <el-col :span="6">
-        <el-card shadow="never" class="table-list-card" :body-style="{ padding: '8px' }">
-          <div slot="header" class="clearfix">
-            <span>数据表</span>
-            <span class="table-count">{{ filteredTables.length }}</span>
-          </div>
-          <el-input v-model="tableFilterLocal" size="mini" placeholder="本地过滤" clearable prefix-icon="el-icon-search" class="mb8" />
-          <el-scrollbar class="table-scroll">
-            <div v-for="name in displayTables" :key="name" class="table-item" :class="{ active: name === currentTable }" @click="selectTable(name)">{{ name }}</div>
-            <div v-if="!displayTables.length" class="empty-tip">暂无表</div>
-          </el-scrollbar>
-        </el-card>
-      </el-col>
+    <el-tabs v-model="workTab" v-if="datasourceId" class="ds-work-tabs">
+      <el-tab-pane label="表数据" name="table">
+        <el-row :gutter="12">
+          <el-col :span="6">
+            <el-card shadow="never" class="table-list-card" :body-style="{ padding: '8px' }">
+              <div slot="header" class="clearfix">
+                <span>数据表</span>
+                <span class="table-count">{{ filteredTables.length }}</span>
+              </div>
+              <el-input v-model="tableFilterLocal" size="mini" placeholder="本地过滤" clearable prefix-icon="el-icon-search" class="mb8" />
+              <el-scrollbar class="table-scroll">
+                <div v-for="name in displayTables" :key="name" class="table-item" :class="{ active: name === currentTable }" @click="selectTable(name)">{{ name }}</div>
+                <div v-if="!displayTables.length" class="empty-tip">暂无表</div>
+              </el-scrollbar>
+            </el-card>
+          </el-col>
 
-      <el-col :span="18">
-        <el-card shadow="never" v-if="currentTable" :body-style="{ padding: '12px' }">
-          <div slot="header" class="clearfix">
-            <span>{{ currentTable }}</span>
-            <el-tag v-if="!pkColumns.length" type="warning" size="mini" style="margin-left: 8px">无主键，仅可查询/新增</el-tag>
-            <div style="float:right">
-              <el-button type="text" size="mini" icon="el-icon-s-grid" @click="openColumnMgr" v-hasPermi="['datasource:schema:edit']">字段</el-button>
-              <el-button type="text" size="mini" icon="el-icon-connection" @click="openIndexMgr" v-hasPermi="['datasource:schema:edit','datasource:schema:list']">索引</el-button>
-              <el-button type="text" size="mini" icon="el-icon-delete" style="color:#F56C6C" @click="openDropTable" v-hasPermi="['datasource:schema:remove']">删表</el-button>
-            </div>
-          </div>
+          <el-col :span="18">
+            <el-card shadow="never" v-if="currentTable" :body-style="{ padding: '12px' }">
+              <div slot="header" class="clearfix">
+                <span>{{ currentTable }}</span>
+                <el-tag v-if="!pkColumns.length" type="warning" size="mini" style="margin-left: 8px">无主键，仅可查询/新增</el-tag>
+                <div style="float:right">
+                  <el-button type="text" size="mini" icon="el-icon-s-grid" @click="openColumnMgr" v-hasPermi="['datasource:schema:edit']">字段</el-button>
+                  <el-button type="text" size="mini" icon="el-icon-connection" @click="openIndexMgr" v-hasPermi="['datasource:schema:edit','datasource:schema:list']">索引</el-button>
+                  <el-button type="text" size="mini" icon="el-icon-delete" style="color:#F56C6C" @click="openDropTable" v-hasPermi="['datasource:schema:remove']">删表</el-button>
+                </div>
+              </div>
 
-          <el-row :gutter="10" class="mb8">
-            <el-col :span="1.5">
-              <el-button type="primary" plain icon="el-icon-plus" size="mini" @click="handleAdd" v-hasPermi="['datasource:data:add']">新增</el-button>
-            </el-col>
-            <el-col :span="1.5">
-              <el-button icon="el-icon-refresh" size="mini" @click="getList">刷新</el-button>
-            </el-col>
-          </el-row>
+              <el-row :gutter="10" class="mb8">
+                <el-col :span="1.5">
+                  <el-button type="primary" plain icon="el-icon-plus" size="mini" @click="handleAdd" v-hasPermi="['datasource:data:add']">新增</el-button>
+                </el-col>
+                <el-col :span="1.5">
+                  <el-button icon="el-icon-refresh" size="mini" @click="getList">刷新</el-button>
+                </el-col>
+              </el-row>
 
-          <el-table v-loading="loading" :data="dataList" border size="mini" max-height="480">
-            <el-table-column v-for="col in columns" :key="col.name" :prop="col.name" :label="colLabel(col)" min-width="120" :show-overflow-tooltip="true" />
-            <el-table-column label="操作" align="center" width="140" fixed="right">
-              <template slot-scope="scope">
-                <el-button size="mini" type="text" icon="el-icon-edit" :disabled="!pkColumns.length" @click="handleUpdate(scope.row)" v-hasPermi="['datasource:data:edit']">修改</el-button>
-                <el-button size="mini" type="text" icon="el-icon-delete" :disabled="!pkColumns.length" @click="handleDelete(scope.row)" v-hasPermi="['datasource:data:remove']">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
-        </el-card>
-        <el-empty v-else description="请选择左侧数据表" />
-      </el-col>
-    </el-row>
+              <el-table v-loading="loading" :data="dataList" border size="mini" max-height="480">
+                <el-table-column v-for="col in columns" :key="col.name" :prop="col.name" :label="colLabel(col)" min-width="120" :show-overflow-tooltip="true" />
+                <el-table-column label="操作" align="center" width="140" fixed="right">
+                  <template slot-scope="scope">
+                    <el-button size="mini" type="text" icon="el-icon-edit" :disabled="!pkColumns.length" @click="handleUpdate(scope.row)" v-hasPermi="['datasource:data:edit']">修改</el-button>
+                    <el-button size="mini" type="text" icon="el-icon-delete" :disabled="!pkColumns.length" @click="handleDelete(scope.row)" v-hasPermi="['datasource:data:remove']">删除</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
+            </el-card>
+            <el-empty v-else description="请选择左侧数据表" />
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+
+      <el-tab-pane label="SQL查询" name="sql" lazy>
+        <sql-query-panel :datasource-id="datasourceId" :suggest-table="currentTable" />
+      </el-tab-pane>
+    </el-tabs>
     <el-empty v-else description="请先选择数据源" />
 
     <!-- 行编辑 -->
@@ -210,11 +218,14 @@
 <script>
 import { listAllDatasource } from '@/api/datasource/info'
 import { listTables, listColumns, listRows, addRow, updateRow, delRow, createTable, dropTable, alterColumn, listIndexes, schemaCapabilities, createIndex, updateIndex, dropIndex } from '@/api/datasource/data'
+import SqlQueryPanel from './SqlQueryPanel.vue'
 
 export default {
   name: 'DatasourceTable',
+  components: { SqlQueryPanel },
   data() {
     return {
+      workTab: 'table',
       datasourceId: undefined,
       datasourceOptions: [],
       tableFilter: '',
@@ -574,6 +585,7 @@ export default {
 
 <style scoped>
 .ds-toolbar { margin-bottom: 8px; }
+.ds-work-tabs { margin-top: 4px; }
 .ds-table-row-form >>> .el-form-item__label { white-space: nowrap; line-height: 32px; }
 .table-list-card { min-height: 560px; }
 .table-count { float: right; color: #909399; font-size: 12px; }
