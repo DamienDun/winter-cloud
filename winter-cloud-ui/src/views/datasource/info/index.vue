@@ -51,8 +51,9 @@
           <span>{{ parseTime(scope.row.gmtModified) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="220" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="280" class-name="small-padding fixed-width">
         <template slot-scope="scope">
+          <el-button size="mini" type="text" icon="el-icon-view" @click="handleView(scope.row)" v-hasPermi="['datasource:info:query']">详情</el-button>
           <el-button size="mini" type="text" icon="el-icon-connection" @click="handleTestRow(scope.row)" v-hasPermi="['datasource:info:test']">测试</el-button>
           <el-button size="mini" type="text" icon="el-icon-edit" @click="handleUpdate(scope.row)" v-hasPermi="['datasource:info:edit']">修改</el-button>
           <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)" v-hasPermi="['datasource:info:remove']">删除</el-button>
@@ -61,6 +62,34 @@
     </el-table>
 
     <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
+
+    <!-- 查看详情（只读，密码不回显） -->
+    <el-dialog title="数据源详情" :visible.sync="viewOpen" width="720px" append-to-body>
+      <el-descriptions :column="2" border size="small" v-if="viewForm">
+        <el-descriptions-item label="名称">{{ viewForm.datasourceName }}</el-descriptions-item>
+        <el-descriptions-item label="分组">{{ viewForm.datasourceGroup }}</el-descriptions-item>
+        <el-descriptions-item label="类型">{{ typeLabel(viewForm.datasourceType) }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="viewForm.status === 1 ? 'success' : 'info'" size="mini">{{ viewForm.status === 1 ? '启用' : '停用' }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="JDBC URL" :span="2">
+          <span style="word-break: break-all">{{ viewForm.jdbcUrl }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="驱动类" :span="2">{{ viewForm.jdbcDriverClass }}</el-descriptions-item>
+        <el-descriptions-item label="用户名">{{ viewForm.jdbcUsername }}</el-descriptions-item>
+        <el-descriptions-item label="密码">******</el-descriptions-item>
+        <el-descriptions-item label="数据库名">{{ viewForm.databaseName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="ID">{{ viewForm.id }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ parseTime(viewForm.gmtCreate) }}</el-descriptions-item>
+        <el-descriptions-item label="修改时间">{{ parseTime(viewForm.gmtModified) }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ viewForm.remark || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <div slot="footer" class="dialog-footer">
+        <el-button type="warning" plain icon="el-icon-connection" :loading="testing" @click="handleTestRow(viewForm)" v-hasPermi="['datasource:info:test']">测试连接</el-button>
+        <el-button type="primary" plain icon="el-icon-edit" @click="openEditFromView" v-hasPermi="['datasource:info:edit']">修改</el-button>
+        <el-button @click="viewOpen = false">关 闭</el-button>
+      </div>
+    </el-dialog>
 
     <el-dialog :title="title" :visible.sync="open" width="720px" append-to-body>
       <el-form ref="form" :model="form" :rules="rules" label-width="110px">
@@ -174,6 +203,8 @@ export default {
       single: true,
       multiple: true,
       open: false,
+      viewOpen: false,
+      viewForm: null,
       title: '',
       typeOptions: [
         { value: 'mysql', label: 'MySQL' },
@@ -251,10 +282,26 @@ export default {
       this.form.jdbcUrl = tpl.jdbcUrl
       this.form.jdbcDriverClass = tpl.jdbcDriverClass
     },
+    typeLabel(type) {
+      const hit = this.typeOptions.find(i => i.value === type)
+      return hit ? hit.label : (type || '-')
+    },
     handleAdd() {
       this.reset()
       this.open = true
       this.title = '新增数据源'
+    },
+    handleView(row) {
+      if (!row || row.id == null) return
+      getDatasource(row.id).then(res => {
+        this.viewForm = Object.assign({}, res.data || {})
+        this.viewOpen = true
+      })
+    },
+    openEditFromView() {
+      if (!this.viewForm || this.viewForm.id == null) return
+      this.viewOpen = false
+      this.handleUpdate(this.viewForm)
     },
     handleUpdate(row) {
       this.reset()
