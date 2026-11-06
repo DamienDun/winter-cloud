@@ -1,6 +1,7 @@
 # Nacos dataId=winter-xxljob-dev.yml, group=DEFAULT_GROUP
 # Gateway route: /xxljob/** -> lb://winter-xxljob
 # Executor admin addresses: http://127.0.0.1:9205
+# 业务库与主库共用 winter-cloud（xxl_job_* 表已迁入该库）
 
 spring:
   redis:
@@ -30,7 +31,7 @@ spring:
       datasource:
         master:
           driver-class-name: com.mysql.cj.jdbc.Driver
-          url: jdbc:mysql://localhost:13306/xxl_job?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+          url: jdbc:mysql://localhost:13306/winter-cloud?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
           username: root
           password: admin
   mail:
