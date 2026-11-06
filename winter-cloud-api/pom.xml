@@ -10,6 +10,7 @@
 
     <modules>
         <module>winter-cloud-api-system</module>
+        <module>winter-cloud-api-xxljob</module>
     </modules>
 
     <artifactId>winter-cloud-api</artifactId>

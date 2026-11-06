@@ -428,6 +428,11 @@
                 <artifactId>winter-cloud-api-system</artifactId>
                 <version>${winter.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.winter</groupId>
+                <artifactId>winter-cloud-api-xxljob</artifactId>
+                <version>${winter.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

@@ -21,4 +21,9 @@ public class ServiceNameConstants
      * 文件服务的serviceid
      */
     public static final String FILE_SERVICE = "winter-file";
+
+    /**
+     * XXL-JOB 调度中心
+     */
+    public static final String XXLJOB_SERVICE = "winter-xxljob";
 }

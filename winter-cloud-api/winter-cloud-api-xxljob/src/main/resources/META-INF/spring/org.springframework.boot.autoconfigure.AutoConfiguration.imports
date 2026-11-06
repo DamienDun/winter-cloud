@@ -1,0 +1,4 @@
+com.winter.cloud.xxljob.api.factory.RemoteXxlJobInfoFallbackFactory
+com.winter.cloud.xxljob.api.factory.RemoteXxlJobLogFallbackFactory
+com.winter.cloud.xxljob.api.factory.RemoteXxlJobGroupFallbackFactory
+com.winter.cloud.xxljob.api.factory.RemoteXxlJobDashboardFallbackFactory
