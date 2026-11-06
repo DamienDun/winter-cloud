@@ -2,13 +2,13 @@
 	<el-form size="small">
 		<el-form-item>
 			<el-radio v-model='radioValue' :label="1">
-				分钟，允许的通配符[, - * /]
+				每分钟 允许的通配符[, - * /]
 			</el-radio>
 		</el-form-item>
 
 		<el-form-item>
 			<el-radio v-model='radioValue' :label="2">
-				周期从
+				周期 从
 				<el-input-number v-model='cycle01' :min="0" :max="58" /> -
 				<el-input-number v-model='cycle02' :min="cycle01 ? cycle01 + 1 : 1" :max="59" /> 分钟
 			</el-radio>
@@ -23,12 +23,10 @@
 		</el-form-item>
 
 		<el-form-item>
-			<el-radio v-model='radioValue' :label="4">
-				指定
-				<el-select clearable v-model="checkboxList" placeholder="可多选" multiple style="width:100%">
-					<el-option v-for="item in 60" :key="item" :value="item-1">{{item-1}}</el-option>
-				</el-select>
-			</el-radio>
+			<el-radio v-model='radioValue' :label="4">指定</el-radio>
+			<el-checkbox-group v-model="checkboxList" class="cron-checkbox-group">
+				<el-checkbox v-for="item in 60" :key="item" :label="item - 1">{{ item - 1 < 10 ? '0' + (item - 1) : item - 1 }}</el-checkbox>
+			</el-checkbox-group>
 		</el-form-item>
 	</el-form>
 
@@ -79,11 +77,9 @@ export default {
 				this.$emit('update', 'min', this.averageTotal, 'min')
 			}
 		},
-		// checkbox值变化时
 		checkboxChange() {
-			if (this.radioValue == '4') {
-				this.$emit('update', 'min', this.checkboxString, 'min')
-			}
+			this.radioValue = 4
+			this.$emit('update', 'min', this.checkboxString, 'min')
 		},
 
 	},
@@ -114,3 +110,21 @@ export default {
 	}
 }
 </script>
+
+<style scoped>
+.cron-checkbox-group {
+	display: flex;
+	flex-wrap: wrap;
+	padding-left: 22px;
+	line-height: 22px;
+}
+.cron-checkbox-group >>> .el-checkbox {
+	margin: 2px 0;
+	margin-right: 0;
+	min-width: 48px;
+}
+.cron-checkbox-group >>> .el-checkbox__label {
+	padding-left: 6px;
+	font-size: 13px;
+}
+</style>

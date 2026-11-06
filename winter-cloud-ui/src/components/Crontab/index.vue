@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <el-tabs type="border-card">
+  <div class="crontab-wrap" :class="{ 'is-compact': compact }">
+    <el-tabs type="border-card" class="crontab-tabs">
       <el-tab-pane label="秒" v-if="shouldHide('second')">
         <CrontabSecond
           @update="updateCrontabValue"
@@ -66,7 +66,7 @@
     </el-tabs>
 
     <div class="popup-main">
-      <div class="popup-result">
+      <div v-if="!compact" class="popup-result">
         <p class="title">时间表达式</p>
         <table>
           <thead>
@@ -101,9 +101,11 @@
           </tbody>
         </table>
       </div>
-      <CrontabResult :ex="crontabValueString"></CrontabResult>
+      <CrontabResult v-if="!hideResult" :ex="crontabValueString"></CrontabResult>
+      <!-- 外部可接管“最近运行时间”（如 xxl-job 走后端 nextTriggerTime） -->
+      <slot name="runtime" :expression="crontabValueString"></slot>
 
-      <div class="pop_btn">
+      <div v-if="!compact" class="pop_btn">
         <el-button size="small" type="primary" @click="submitFill">确定</el-button>
         <el-button size="small" type="warning" @click="clearCron">重置</el-button>
         <el-button size="small" @click="hidePopup">取消</el-button>
@@ -140,7 +142,20 @@ export default {
     }
   },
   name: "vcrontab",
-  props: ["expression", "hideComponent"],
+  props: {
+    expression: String,
+    hideComponent: Array,
+    // 隐藏内置“最近5次运行时间”，改由 slot=runtime 自定义
+    hideResult: {
+      type: Boolean,
+      default: false
+    },
+    // xxl-job cronGen 紧凑模式：无表达式表/无底部按钮，勾选区 10 列铺满
+    compact: {
+      type: Boolean,
+      default: false
+    }
+  },
   methods: {
     shouldHide(key) {
       if (this.hideComponent && this.hideComponent.includes(key)) return false
@@ -213,7 +228,8 @@ export default {
           insValue = 3
         } else {
           insValue = 4
-          this.$refs[refName].checkboxList = value.split(",")
+          // checkbox 的 label 为数字，需与回填类型一致
+          this.$refs[refName].checkboxList = value.split(",").map(v => Number(v))
         }
       } else if (name == "day") {
         if (value === "*") {
@@ -243,7 +259,7 @@ export default {
         } else if (value === "L") {
           insValue = 6
         } else {
-          this.$refs[refName].checkboxList = value.split(",")
+          this.$refs[refName].checkboxList = value.split(",").map(v => Number(v))
           insValue = 7
         }
       } else if (name == "week") {
@@ -362,6 +378,9 @@ export default {
     hideComponent(value) {
       // 隐藏部分组件
     },
+    crontabValueString(val) {
+      this.$emit("cron-change", val)
+    },
   },
   mounted: function() {
     this.resolveExp()
@@ -369,17 +388,102 @@ export default {
 }
 </script>
 <style scoped>
+.crontab-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.crontab-tabs {
+  flex: none;
+}
+.crontab-wrap >>> .el-form-item {
+  margin-bottom: 8px;
+}
+/* 默认（监控中心等）：勾选区可滚动，避免过高 */
+.crontab-wrap:not(.is-compact) {
+  max-height: 72vh;
+}
+.crontab-wrap:not(.is-compact) >>> .crontab-tabs > .el-tabs__content {
+  height: 220px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+.crontab-wrap:not(.is-compact) >>> .cron-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  padding-left: 18px;
+  line-height: 20px;
+}
+.crontab-wrap:not(.is-compact) >>> .cron-checkbox-group .el-checkbox {
+  margin: 1px 0;
+  margin-right: 0;
+  width: 46px;
+}
+/* compact：对齐 xxl-job cronGen，指定项 10 列网格一次铺开 */
+.crontab-wrap.is-compact >>> .crontab-tabs > .el-tabs__content {
+  padding: 0;
+  overflow: visible;
+}
+.crontab-wrap.is-compact >>> .el-form-item {
+  margin-bottom: 10px;
+  overflow: visible;
+}
+.crontab-wrap.is-compact >>> .el-form-item__content {
+  overflow: visible;
+  line-height: 28px;
+}
+.crontab-wrap.is-compact >>> .el-radio {
+  white-space: normal;
+  height: auto;
+  line-height: 28px;
+}
+.crontab-wrap.is-compact >>> .el-radio__label {
+  font-size: 14px;
+  white-space: normal;
+}
+.crontab-wrap.is-compact >>> .el-input-number--small {
+  width: 110px;
+}
+.crontab-wrap.is-compact >>> .cron-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px 2px;
+  padding: 6px 0 0 24px;
+  line-height: 22px;
+}
+.crontab-wrap.is-compact >>> .cron-checkbox-group .el-checkbox {
+  margin: 0;
+  margin-right: 0;
+  width: auto;
+  display: flex;
+  align-items: center;
+}
+.crontab-wrap.is-compact >>> .cron-checkbox-group .el-checkbox__label {
+  padding-left: 6px;
+  font-size: 13px;
+}
+.crontab-wrap >>> .cron-checkbox-group .el-checkbox__label {
+  padding-left: 4px;
+  font-size: 13px;
+}
 .pop_btn {
   text-align: center;
-  margin-top: 20px;
+  margin-top: 8px;
+  flex-shrink: 0;
 }
 .popup-main {
   position: relative;
-  margin: 10px auto;
+  margin: 6px auto 0;
   background: #fff;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: 14px;
   overflow: hidden;
+  flex-shrink: 0;
+  text-align: left;
+}
+.crontab-wrap.is-compact .popup-main {
+  overflow: visible;
+  margin-top: 0;
 }
 .popup-title {
   overflow: hidden;
@@ -389,21 +493,21 @@ export default {
 }
 .popup-result {
   box-sizing: border-box;
-  line-height: 24px;
-  margin: 25px auto;
-  padding: 15px 10px 10px;
+  line-height: 22px;
+  margin: 16px auto 6px;
+  padding: 10px 8px 6px;
   border: 1px solid #ccc;
   position: relative;
 }
 .popup-result .title {
   position: absolute;
-  top: -28px;
+  top: -22px;
   left: 50%;
   width: 140px;
-  font-size: 14px;
+  font-size: 13px;
   margin-left: -70px;
   text-align: center;
-  line-height: 30px;
+  line-height: 24px;
   background: #fff;
 }
 .popup-result table {
@@ -415,8 +519,8 @@ export default {
   display: block;
   width: 100%;
   font-family: arial;
-  line-height: 30px;
-  height: 30px;
+  line-height: 28px;
+  height: 28px;
   white-space: nowrap;
   overflow: hidden;
   border: 1px solid #e8e8e8;

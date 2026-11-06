@@ -42,12 +42,10 @@
 		</el-form-item>
 
 		<el-form-item>
-			<el-radio v-model='radioValue' :label="7">
-				指定
-				<el-select clearable v-model="checkboxList" placeholder="可多选" multiple style="width:100%">
-					<el-option v-for="item in 31" :key="item" :value="item">{{item}}</el-option>
-				</el-select>
-			</el-radio>
+			<el-radio v-model='radioValue' :label="7">指定</el-radio>
+			<el-checkbox-group v-model="checkboxList" class="cron-checkbox-group">
+				<el-checkbox v-for="item in 31" :key="item" :label="item">{{ item < 10 ? '0' + item : item }}</el-checkbox>
+			</el-checkbox-group>
 		</el-form-item>
 	</el-form>
 </template>
@@ -119,11 +117,9 @@ export default {
 				this.$emit('update', 'day', this.workdayCheck + 'W')
 			}
 		},
-		// checkbox值变化时
 		checkboxChange() {
-			if (this.radioValue == '7') {
-				this.$emit('update', 'day', this.checkboxString)
-			}
+			this.radioValue = 7
+			this.$emit('update', 'day', this.checkboxString)
 		}
 	},
 	watch: {
@@ -159,3 +155,21 @@ export default {
 	}
 }
 </script>
+
+<style scoped>
+.cron-checkbox-group {
+	display: flex;
+	flex-wrap: wrap;
+	padding-left: 22px;
+	line-height: 22px;
+}
+.cron-checkbox-group >>> .el-checkbox {
+	margin: 2px 0;
+	margin-right: 0;
+	min-width: 48px;
+}
+.cron-checkbox-group >>> .el-checkbox__label {
+	padding-left: 6px;
+	font-size: 13px;
+}
+</style>

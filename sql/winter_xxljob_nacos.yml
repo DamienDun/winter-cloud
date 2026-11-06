@@ -1,0 +1,70 @@
+# Nacos dataId=winter-xxljob-dev.yml, group=DEFAULT_GROUP
+# Gateway route: /xxljob/** -> lb://winter-xxljob
+# Executor admin addresses: http://127.0.0.1:9205
+
+spring:
+  redis:
+    host: 10.36.23.78
+    port: 6380
+    database: 4
+    password: Redis@2022
+    lettuce:
+      pool:
+        min-idle: 0
+        max-idle: 8
+        max-active: 8
+        max-wait: -1ms
+  datasource:
+    druid:
+      stat-view-servlet:
+        enabled: false
+    dynamic:
+      primary: master
+      druid:
+        initial-size: 5
+        min-idle: 5
+        maxActive: 20
+        maxWait: 60000
+        validationQuery: SELECT 1
+        testWhileIdle: true
+      datasource:
+        master:
+          driver-class-name: com.mysql.cj.jdbc.Driver
+          url: jdbc:mysql://localhost:13306/xxl_job?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+          username: root
+          password: admin
+  mail:
+    host: localhost
+    port: 25
+    from: xxljob@localhost
+    properties:
+      mail.smtp.auth: false
+
+mybatis-plus:
+  type-aliases-package: com.winter.cloud.xxljob.domain
+  mapper-locations: classpath*:/mybatis-mapper/*Mapper.xml,classpath*:mapper/**/*Mapper.xml
+  configuration:
+    cache-enabled: true
+    use-generated-keys: true
+    default-executor-type: simple
+
+xxl:
+  job:
+    accessToken:
+    i18n: zh_CN
+    triggerpool:
+      fast:
+        max: 200
+      slow:
+        max: 100
+    logretentiondays: 30
+
+springdoc:
+  gatewayUrl: http://localhost:8080/${spring.application.name}
+  api-docs:
+    enabled: true
+  info:
+    title: XXL-JOB Embedded Admin API
+    description: Embedded xxl-job-admin 2.3.0
+    contact:
+      name: Winter
