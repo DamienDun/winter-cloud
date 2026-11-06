@@ -33,3 +33,17 @@ INSERT INTO sys_role_menu VALUES (1, 2211);
 INSERT INTO sys_role_menu VALUES (1, 2212);
 INSERT INTO sys_role_menu VALUES (1, 2213);
 INSERT INTO sys_role_menu VALUES (1, 2214);
+
+-- XXL-JOB gateway route (paste into Nacos winter-gateway-dev.yml routes)
+--        - id: winter-xxljob
+--          uri: lb://winter-xxljob
+--          predicates:
+--            - Path=/xxljob/**
+--          filters:
+--            - StripPrefix=1
+-- security.ignore.whites extra (if missing):
+--      - /*/v3/api-docs/**
+--      - /doc.html
+--      - /swagger-ui/**
+--      - /webjars/**
+

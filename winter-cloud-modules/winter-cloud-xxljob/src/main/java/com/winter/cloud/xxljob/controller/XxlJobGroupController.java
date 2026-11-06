@@ -16,7 +16,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/jobgroup")
-@Tag(name = "XXL-JOB Executor Group")
+@Tag(name = "XXL-JOB执行器管理")
 public class XxlJobGroupController extends BaseController {
 
     @Autowired
@@ -24,7 +24,7 @@ public class XxlJobGroupController extends BaseController {
 
     @RequiresPermissions("xxljob:jobgroup:list")
     @GetMapping("/list")
-    @Operation(summary = "page list")
+    @Operation(summary = "执行器分页列表")
     public TableDataInfo list(@RequestParam(defaultValue = "1") Integer pageNum,
                               @RequestParam(defaultValue = "10") Integer pageSize,
                               String appname, String title) {
@@ -46,7 +46,7 @@ public class XxlJobGroupController extends BaseController {
 
     @RequiresPermissions("xxljob:jobgroup:list")
     @GetMapping("/all")
-    @Operation(summary = "all groups")
+    @Operation(summary = "全部执行器")
     public AjaxResult all() {
         try {
             return success(jobGroupService.listAll());
@@ -58,6 +58,7 @@ public class XxlJobGroupController extends BaseController {
     @RequiresPermissions("xxljob:jobgroup:add")
     @Log(title = "XXL-JOB Group", businessType = BusinessType.INSERT)
     @PostMapping
+    @Operation(summary = "新增执行器")
     public AjaxResult add(@RequestBody Map<String, Object> body) {
         try {
             jobGroupService.save(body);
@@ -70,6 +71,7 @@ public class XxlJobGroupController extends BaseController {
     @RequiresPermissions("xxljob:jobgroup:edit")
     @Log(title = "XXL-JOB Group", businessType = BusinessType.UPDATE)
     @PutMapping
+    @Operation(summary = "修改执行器")
     public AjaxResult edit(@RequestBody Map<String, Object> body) {
         try {
             jobGroupService.update(body);
@@ -82,6 +84,7 @@ public class XxlJobGroupController extends BaseController {
     @RequiresPermissions("xxljob:jobgroup:remove")
     @Log(title = "XXL-JOB Group", businessType = BusinessType.DELETE)
     @DeleteMapping("/{id}")
+    @Operation(summary = "删除执行器")
     public AjaxResult remove(@PathVariable int id) {
         try {
             jobGroupService.remove(id);

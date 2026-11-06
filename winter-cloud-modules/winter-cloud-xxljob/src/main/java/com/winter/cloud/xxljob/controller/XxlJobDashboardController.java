@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/dashboard")
-@Tag(name = "XXL-JOB Dashboard")
+@Tag(name = "XXL-JOB运行报表")
 public class XxlJobDashboardController extends BaseController {
 
     @Autowired
@@ -22,7 +22,7 @@ public class XxlJobDashboardController extends BaseController {
 
     @RequiresPermissions("xxljob:dashboard:list")
     @GetMapping("/info")
-    @Operation(summary = "dashboard top stats")
+    @Operation(summary = "报表顶部统计")
     public AjaxResult info() {
         try {
             return success(dashboardService.dashboardInfo());
@@ -33,7 +33,7 @@ public class XxlJobDashboardController extends BaseController {
 
     @RequiresPermissions("xxljob:dashboard:list")
     @GetMapping("/chart")
-    @Operation(summary = "dashboard chart")
+    @Operation(summary = "调度趋势图表")
     public AjaxResult chart(@RequestParam String startDate, @RequestParam String endDate) {
         try {
             return success(dashboardService.chartInfo(startDate, endDate));

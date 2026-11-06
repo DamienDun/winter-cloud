@@ -11,11 +11,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * Embedded XXL-JOB admin (2.3.0 scheduler + Winter REST API)
  */
 @EnableWinterSwagger(
-        title = "WINTER XXL-JOB API",
-        description = "Embedded XXL-JOB admin APIs",
+        title = "WINTER微服务XXL-JOB接口文档",
+        description = "内嵌 XXL-JOB 调度中心（任务/日志/执行器/报表）",
         authorName = "WinterCloud",
         groups = {
-                @ApiGroup(groupName = "XXL-JOB", packages = {"com.winter.cloud.xxljob.controller"}),
+                @ApiGroup(groupName = "XXL-JOB管理模块", packages = {"com.winter.cloud.xxljob.controller"}),
         })
 @EnableCustomConfig
 @EnableRyFeignClients

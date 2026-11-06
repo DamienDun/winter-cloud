@@ -1,5 +1,7 @@
 # Nacos dataId=winter-xxljob-dev.yml, group=DEFAULT_GROUP
 # Gateway route: /xxljob/** -> lb://winter-xxljob
+# Swagger: /winter-xxljob/v3/api-docs/winter-xxljob ; local :9205/doc.html
+# Gateway security.ignore.whites need: /*/v3/api-docs/**
 # Executor admin addresses: http://127.0.0.1:9205
 # 业务库与主库共用 winter-cloud（xxl_job_* 表已迁入该库）
 
@@ -60,12 +62,19 @@ xxl:
         max: 100
     logretentiondays: 30
 
+# Knife4j / SpringDoc
+# local: http://localhost:9205/doc.html
+# gateway: http://localhost:8080/doc.html -> winter-xxljob
+swagger:
+  enabled: true
+  gatewayUrl: http://localhost:8080/${spring.application.name}
+
 springdoc:
   gatewayUrl: http://localhost:8080/${spring.application.name}
   api-docs:
     enabled: true
   info:
-    title: XXL-JOB Embedded Admin API
-    description: Embedded xxl-job-admin 2.3.0
+    title: XXL-JOB调度中心接口文档
+    description: 内嵌 xxl-job-admin 2.3.0（任务/日志/执行器/报表）
     contact:
       name: Winter

@@ -17,7 +17,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/jobinfo")
-@Tag(name = "XXL-JOB Job Info")
+@Tag(name = "XXL-JOB任务管理")
 public class XxlJobInfoController extends BaseController {
 
     @Autowired
@@ -25,6 +25,7 @@ public class XxlJobInfoController extends BaseController {
 
     @RequiresPermissions("xxljob:jobinfo:list")
     @GetMapping("/list")
+    @Operation(summary = "任务分页列表")
     public TableDataInfo list(@RequestParam(defaultValue = "1") Integer pageNum,
                               @RequestParam(defaultValue = "10") Integer pageSize,
                               Integer jobGroup, Integer triggerStatus,
@@ -47,7 +48,7 @@ public class XxlJobInfoController extends BaseController {
 
     @RequiresPermissions("xxljob:jobinfo:list")
     @GetMapping("/enums")
-    @Operation(summary = "dropdown enums")
+    @Operation(summary = "任务表单枚举项")
     public AjaxResult enums() {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("scheduleType", new String[]{"NONE", "CRON", "FIX_RATE"});
@@ -61,6 +62,7 @@ public class XxlJobInfoController extends BaseController {
     @RequiresPermissions("xxljob:jobinfo:add")
     @Log(title = "XXL-JOB Info", businessType = BusinessType.INSERT)
     @PostMapping
+    @Operation(summary = "新增任务")
     public AjaxResult add(@RequestBody Map<String, Object> body) {
         try {
             jobInfoService.add(body);
@@ -73,6 +75,7 @@ public class XxlJobInfoController extends BaseController {
     @RequiresPermissions("xxljob:jobinfo:edit")
     @Log(title = "XXL-JOB Info", businessType = BusinessType.UPDATE)
     @PutMapping
+    @Operation(summary = "修改任务")
     public AjaxResult edit(@RequestBody Map<String, Object> body) {
         try {
             jobInfoService.update(body);
@@ -85,6 +88,7 @@ public class XxlJobInfoController extends BaseController {
     @RequiresPermissions("xxljob:jobinfo:remove")
     @Log(title = "XXL-JOB Info", businessType = BusinessType.DELETE)
     @DeleteMapping("/{id}")
+    @Operation(summary = "删除任务")
     public AjaxResult remove(@PathVariable int id) {
         try {
             jobInfoService.remove(id);
@@ -97,6 +101,7 @@ public class XxlJobInfoController extends BaseController {
     @RequiresPermissions("xxljob:jobinfo:edit")
     @Log(title = "XXL-JOB Info", businessType = BusinessType.UPDATE)
     @PutMapping("/start/{id}")
+    @Operation(summary = "启动任务")
     public AjaxResult start(@PathVariable int id) {
         try {
             jobInfoService.start(id);
@@ -109,6 +114,7 @@ public class XxlJobInfoController extends BaseController {
     @RequiresPermissions("xxljob:jobinfo:edit")
     @Log(title = "XXL-JOB Info", businessType = BusinessType.UPDATE)
     @PutMapping("/stop/{id}")
+    @Operation(summary = "停止任务")
     public AjaxResult stop(@PathVariable int id) {
         try {
             jobInfoService.stop(id);
@@ -121,6 +127,7 @@ public class XxlJobInfoController extends BaseController {
     @RequiresPermissions("xxljob:jobinfo:trigger")
     @Log(title = "XXL-JOB Info", businessType = BusinessType.OTHER)
     @PostMapping("/trigger")
+    @Operation(summary = "执行一次")
     public AjaxResult trigger(@RequestBody Map<String, Object> body) {
         try {
             int id = Integer.parseInt(String.valueOf(body.get("id")));
@@ -135,6 +142,7 @@ public class XxlJobInfoController extends BaseController {
 
     @RequiresPermissions("xxljob:jobinfo:list")
     @GetMapping("/nextTriggerTime")
+    @Operation(summary = "下次执行时间")
     public AjaxResult nextTriggerTime(String scheduleType, String scheduleConf) {
         try {
             return success(jobInfoService.nextTriggerTime(scheduleType, scheduleConf));
