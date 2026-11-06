@@ -25,6 +25,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
         authorName = "WinterCloud",
         groups = {
                 @ApiGroup(groupName = "数据源管理模块", packages = {"com.winter.cloud.datasource.controller"}),
+                @ApiGroup(groupName = "作业管理模块", packages = {"com.winter.cloud.datasource.controller"}),
         })
 @EnableAspectJAutoProxy(exposeProxy = true)
 @EnableAsync

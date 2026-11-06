@@ -7,7 +7,8 @@ public interface IXxlJobInfoService {
     Map<String, Object> pageList(int pageNum, int pageSize, Integer jobGroup, Integer triggerStatus,
                                  String jobDesc, String executorHandler, String author);
     Map<String, Object> loadDetail(int id);
-    void add(Map<String, Object> job);
+    /** 新增任务，返回 xxl_job_info.id */
+    int add(Map<String, Object> job);
     void update(Map<String, Object> job);
     void remove(int id);
     void start(int id);

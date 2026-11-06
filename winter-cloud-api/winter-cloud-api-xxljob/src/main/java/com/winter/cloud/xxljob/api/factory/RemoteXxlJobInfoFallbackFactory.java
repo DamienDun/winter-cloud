@@ -87,6 +87,41 @@ public class RemoteXxlJobInfoFallbackFactory implements FallbackFactory<RemoteXx
             public AjaxResult saveGlue(Map<String, Object> body) {
                 return fail("保存GLUE");
             }
+
+            @Override
+            public AjaxResult addInner(Map<String, Object> body, String source) {
+                return fail("内部新增任务");
+            }
+
+            @Override
+            public AjaxResult editInner(Map<String, Object> body, String source) {
+                return fail("内部修改任务");
+            }
+
+            @Override
+            public AjaxResult removeInner(int id, String source) {
+                return fail("内部删除任务");
+            }
+
+            @Override
+            public AjaxResult startInner(int id, String source) {
+                return fail("内部启动任务");
+            }
+
+            @Override
+            public AjaxResult stopInner(int id, String source) {
+                return fail("内部停止任务");
+            }
+
+            @Override
+            public AjaxResult triggerInner(Map<String, Object> body, String source) {
+                return fail("内部执行任务");
+            }
+
+            @Override
+            public AjaxResult nextTriggerTimeInner(String scheduleType, String scheduleConf, String source) {
+                return fail("内部计算下次执行时间");
+            }
         };
     }
 }

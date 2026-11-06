@@ -65,8 +65,8 @@ public class XxlJobInfoController extends BaseController {
     @Operation(summary = "新增任务")
     public AjaxResult add(@RequestBody Map<String, Object> body) {
         try {
-            jobInfoService.add(body);
-            return success();
+            // data 为新建任务主键，供业务服务绑定 xxlJobId
+            return success(jobInfoService.add(body));
         } catch (Exception e) {
             return error(e.getMessage());
         }

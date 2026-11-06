@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.winter.cloud.common.mybatis.domain.entity.audit.CreateAuditing;
 import com.winter.cloud.common.mybatis.domain.entity.audit.DeleteAuditing;
 import com.winter.cloud.common.mybatis.domain.entity.audit.Entity;
@@ -27,7 +29,9 @@ public class DefaultBaseEntity implements Entity<Long>, CreateAuditing, Modified
 
     private static final long serialVersionUID = 5229461843731683997L;
 
+    /** 雪花ID必须序列化成字符串，否则前端 Number 丢精度导致回显/请求用错ID */
     @TableId(value = "id", type = IdType.ASSIGN_ID)
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
 
     private String remark;

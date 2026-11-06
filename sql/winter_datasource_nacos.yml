@@ -60,6 +60,21 @@ springdoc:
     enabled: true
   info:
     title: Datasource Admin API
-    description: JDBC datasource CRUD and connection test
+    description: JDBC datasource CRUD, table ops and job management
     contact:
       name: Winter
+
+# XXL-JOB 执行器（AppName 固定 datasource-data-extra，与业务绑定一致）
+# admin.addresses 指向 winter-xxljob 对外可访问地址（含网关或直连）
+xxl:
+  job:
+    admin:
+      addresses: http://127.0.0.1:9205
+    accessToken:
+    executor:
+      appname: datasource-data-extra
+      address:
+      ip:
+      port: 9998
+      logpath: logs/xxl-job/datasource
+      logretentiondays: 30

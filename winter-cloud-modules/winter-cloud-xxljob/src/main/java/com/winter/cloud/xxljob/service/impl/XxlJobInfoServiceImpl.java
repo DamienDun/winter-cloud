@@ -63,8 +63,10 @@ public class XxlJobInfoServiceImpl implements IXxlJobInfoService {
     }
 
     @Override
-    public void add(Map<String, Object> job) {
-        assertOk(xxlJobService.add(toInfo(job)));
+    public int add(Map<String, Object> job) {
+        ReturnT<String> ret = xxlJobService.add(toInfo(job));
+        assertOk(ret);
+        return Integer.parseInt(ret.getContent());
     }
 
     @Override

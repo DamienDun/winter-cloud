@@ -56,6 +56,16 @@ public class RemoteXxlJobGroupFallbackFactory implements FallbackFactory<RemoteX
             public AjaxResult remove(int id) {
                 return fail("删除执行器");
             }
+
+            @Override
+            public AjaxResult allInner(String source) {
+                return fail("内部查询全部执行器");
+            }
+
+            @Override
+            public AjaxResult addInner(Map<String, Object> body, String source) {
+                return fail("内部新增执行器");
+            }
         };
     }
 }

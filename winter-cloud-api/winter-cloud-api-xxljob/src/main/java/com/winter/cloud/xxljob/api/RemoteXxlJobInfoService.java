@@ -1,5 +1,6 @@
 package com.winter.cloud.xxljob.api;
 
+import com.winter.cloud.common.core.constant.SecurityConstants;
 import com.winter.cloud.common.core.constant.ServiceNameConstants;
 import com.winter.cloud.common.core.web.domain.AjaxResult;
 import com.winter.cloud.common.core.web.page.TableDataInfo;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.Map;
@@ -94,4 +96,35 @@ public interface RemoteXxlJobInfoService {
      */
     @PostMapping("/jobinfo/glue")
     AjaxResult saveGlue(@RequestBody Map<String, Object> body);
+
+    // ---------- 内部调用（from-source=inner）----------
+
+    @PostMapping("/inner/jobinfo")
+    AjaxResult addInner(@RequestBody Map<String, Object> body,
+                        @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
+
+    @PutMapping("/inner/jobinfo")
+    AjaxResult editInner(@RequestBody Map<String, Object> body,
+                         @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
+
+    @DeleteMapping("/inner/jobinfo/{id}")
+    AjaxResult removeInner(@PathVariable("id") int id,
+                           @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
+
+    @PutMapping("/inner/jobinfo/start/{id}")
+    AjaxResult startInner(@PathVariable("id") int id,
+                          @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
+
+    @PutMapping("/inner/jobinfo/stop/{id}")
+    AjaxResult stopInner(@PathVariable("id") int id,
+                         @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
+
+    @PostMapping("/inner/jobinfo/trigger")
+    AjaxResult triggerInner(@RequestBody Map<String, Object> body,
+                            @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
+
+    @GetMapping("/inner/jobinfo/nextTriggerTime")
+    AjaxResult nextTriggerTimeInner(@RequestParam("scheduleType") String scheduleType,
+                                    @RequestParam("scheduleConf") String scheduleConf,
+                                    @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
 }
