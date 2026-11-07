@@ -1,14 +1,17 @@
 package com.winter.cloud.datasource.domain.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.winter.cloud.common.mybatis.domain.entity.DefaultBaseEntity;
+import com.winter.cloud.datasource.domain.dto.DsJobFieldMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * 数据源作业信息（绑定 xxl_job_id）
@@ -48,6 +51,26 @@ public class DsJobInfo extends DefaultBaseEntity {
 
     @Schema(description = "数据源类型")
     private String datasourceType;
+
+    @Schema(description = "源表（JDBC源时使用）")
+    private String sourceTable;
+
+    @Schema(description = "目标数据源id")
+    private Long targetDatasourceId;
+
+    @Schema(description = "目标数据源名称")
+    private String targetDatasourceName;
+
+    @Schema(description = "目标数据表")
+    private String targetTable;
+
+    @Schema(description = "字段映射JSON")
+    private String fieldMappingJson;
+
+    /** 非表字段：解析后的字段映射 */
+    @TableField(exist = false)
+    @Schema(description = "字段映射列表")
+    private List<DsJobFieldMapping> fieldMappings;
 
     /** 0全量 1增量 */
     @Schema(description = "同步方式")

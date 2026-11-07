@@ -7,6 +7,7 @@ import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.security.utils.SecurityUtils;
 import com.winter.cloud.datasource.constant.DsJobConstants;
 import com.winter.cloud.datasource.domain.dto.DsJobExecuteParam;
+import com.winter.cloud.datasource.domain.dto.DsJobFieldMapping;
 import com.winter.cloud.datasource.domain.entity.DsApiDatasource;
 import com.winter.cloud.datasource.domain.entity.DsJdbcDatasource;
 import com.winter.cloud.datasource.domain.entity.DsJobInfo;
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -57,7 +59,9 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
 
     @Override
     public DsJobInfo selectById(Long id) {
-        return jobInfoMapper.selectById(id);
+        DsJobInfo job = jobInfoMapper.selectById(id);
+        fillFieldMappings(job);
+        return job;
     }
 
     @Override
@@ -74,6 +78,8 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
     @Transactional(rollbackFor = Exception.class)
     public int insert(DsJobInfo entity) {
         fillDatasourceSnapshot(entity);
+        fillTargetDatasourceSnapshot(entity);
+        syncFieldMappingJson(entity);
         normalizeDefaults(entity);
         int rows = jobInfoMapper.insert(entity);
         Long xxlJobId = xxlJobBindHelper.createXxlJob(entity);
@@ -87,6 +93,8 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
     public int update(DsJobInfo entity) {
         DsJobInfo db = requireJob(entity.getId());
         fillDatasourceSnapshot(entity);
+        fillTargetDatasourceSnapshot(entity);
+        syncFieldMappingJson(entity);
         entity.setXxlJobId(db.getXxlJobId());
         int rows = jobInfoMapper.updateById(entity);
         if (db.getXxlJobId() != null) {
@@ -190,12 +198,16 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
             }
             entity.setDatasourceName(api.getDatasourceName());
             entity.setDatasourceType("api");
+            entity.setSourceTable(null);
             return;
         }
         DsJdbcDatasource ds = datasourceService.selectById(entity.getDatasourceId());
         if (ds != null) {
             entity.setDatasourceName(ds.getDatasourceName());
             entity.setDatasourceType(ds.getDatasourceType());
+            if (StringUtils.isEmpty(entity.getSourceTable())) {
+                throw new IllegalArgumentException("sourceTable required for jdbc source");
+            }
             return;
         }
         // 兼容：未传类型或类型不准时再试 API
@@ -205,6 +217,61 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
         }
         entity.setDatasourceName(api.getDatasourceName());
         entity.setDatasourceType("api");
+        entity.setSourceTable(null);
+    }
+
+    private void fillTargetDatasourceSnapshot(DsJobInfo entity) {
+        if (entity.getTargetDatasourceId() == null) {
+            throw new IllegalArgumentException("targetDatasourceId required");
+        }
+        if (StringUtils.isEmpty(entity.getTargetTable())) {
+            throw new IllegalArgumentException("targetTable required");
+        }
+        DsJdbcDatasource target = datasourceService.selectById(entity.getTargetDatasourceId());
+        if (target == null) {
+            throw new IllegalArgumentException("target datasource not found");
+        }
+        entity.setTargetDatasourceName(target.getDatasourceName());
+    }
+
+    private void syncFieldMappingJson(DsJobInfo entity) {
+        if (entity.getFieldMappings() != null) {
+            List<DsJobFieldMapping> cleaned = new ArrayList<>();
+            for (DsJobFieldMapping item : entity.getFieldMappings()) {
+                if (item == null) {
+                    continue;
+                }
+                if (StringUtils.isEmpty(item.getSourceField()) || StringUtils.isEmpty(item.getTargetField())) {
+                    continue;
+                }
+                cleaned.add(item);
+            }
+            if (cleaned.isEmpty()) {
+                throw new IllegalArgumentException("fieldMappings required");
+            }
+            entity.setFieldMappings(cleaned);
+            entity.setFieldMappingJson(JSON.toJSONString(cleaned));
+            return;
+        }
+        if (StringUtils.isEmpty(entity.getFieldMappingJson()) || "[]".equals(entity.getFieldMappingJson().trim())) {
+            throw new IllegalArgumentException("fieldMappings required");
+        }
+    }
+
+    private void fillFieldMappings(DsJobInfo entity) {
+        if (entity == null) {
+            return;
+        }
+        if (StringUtils.isNotEmpty(entity.getFieldMappingJson())) {
+            try {
+                entity.setFieldMappings(JSON.parseArray(entity.getFieldMappingJson(), DsJobFieldMapping.class));
+            } catch (Exception e) {
+                entity.setFieldMappings(new ArrayList<>());
+            }
+        }
+        if (entity.getFieldMappings() == null) {
+            entity.setFieldMappings(new ArrayList<>());
+        }
     }
 
     private void normalizeDefaults(DsJobInfo entity) {

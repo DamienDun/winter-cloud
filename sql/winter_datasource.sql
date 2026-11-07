@@ -88,6 +88,11 @@ CREATE TABLE IF NOT EXISTS `ds_job_info` (
   `datasource_id` bigint(20) NOT NULL COMMENT '数据源id',
   `datasource_name` varchar(200) DEFAULT NULL COMMENT '数据源名称',
   `datasource_type` varchar(45) DEFAULT NULL COMMENT '数据源类型',
+  `source_table` varchar(200) DEFAULT NULL COMMENT '源表（JDBC源）',
+  `target_datasource_id` bigint(20) DEFAULT NULL COMMENT '目标数据源id',
+  `target_datasource_name` varchar(200) DEFAULT NULL COMMENT '目标数据源名称',
+  `target_table` varchar(200) DEFAULT NULL COMMENT '目标数据表',
+  `field_mapping_json` mediumtext COMMENT '字段映射JSON',
   `sync_type` tinyint(4) NOT NULL DEFAULT 0 COMMENT '0全量 1增量',
   `trigger_type` tinyint(4) NOT NULL DEFAULT 0 COMMENT '0手动 1定时',
   `cron` varchar(128) DEFAULT '' COMMENT 'cron表达式',
@@ -105,6 +110,7 @@ CREATE TABLE IF NOT EXISTS `ds_job_info` (
   PRIMARY KEY (`id`),
   KEY `idx_ds_job_xxl` (`xxl_job_id`),
   KEY `idx_ds_job_ds` (`datasource_id`),
+  KEY `idx_ds_job_target_ds` (`target_datasource_id`),
   KEY `idx_ds_job_status` (`job_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数据源作业信息';
 
