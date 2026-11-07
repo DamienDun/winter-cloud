@@ -134,20 +134,18 @@
         </el-form-item>
         <el-form-item label="目标数据表" prop="targetTable">
           <div style="display: flex; width: 100%; gap: 8px;">
-            <el-select
+            <!-- 用 autocomplete 替代 select：可直接改表名，不必先清空再回车创建 -->
+            <el-autocomplete
               v-model="form.targetTable"
-              placeholder="选择已有表，或输入新表名后回车"
-              filterable
-              allow-create
-              default-first-option
+              :fetch-suggestions="queryTargetTableSuggestions"
+              placeholder="直接输入表名，或从下拉选择已有表"
               clearable
               style="flex: 1"
               :disabled="!form.targetDatasourceId"
-              :loading="targetTableLoading"
-              @change="onTargetTableChange"
-            >
-              <el-option v-for="t in targetTableSelectOptions" :key="t" :label="t" :value="t" />
-            </el-select>
+              :trigger-on-focus="true"
+              @select="onTargetTableSelect"
+              @blur="onTargetTableBlur"
+            />
             <el-button
               size="mini"
               :disabled="!form.targetDatasourceId || !form.sourceTable"
@@ -281,6 +279,8 @@ export default {
       title: '',
       // 修改回显加载中：忽略 select 的 change，避免清空已回显值并重复打列接口报错
       formHydrating: false,
+      /** 已提交生效的目标表名（用于判断是否真切换了表） */
+      lastAppliedTargetTable: undefined,
       jdbcAllOptions: [],
       datasourceOptions: [],
       sourceTableOptions: [],
@@ -332,17 +332,6 @@ export default {
     canAutoMap() {
       // 有源字段即可：目标有列则做交集；无列则按源字段同名生成
       return this.sourceFieldOptions.length > 0
-    },
-    /** 已有表 + 当前自定义表名（编辑回显/新建表时保证下拉能显示值） */
-    targetTableSelectOptions() {
-      const set = new Set(this.targetTableOptions || [])
-      if (this.form && this.form.targetTable) {
-        set.add(this.form.targetTable)
-      }
-      if (this.form && this.form.sourceTable) {
-        set.add(this.form.sourceTable)
-      }
-      return Array.from(set)
     },
     /**
      * 目标字段候选：库表已有列 + 当前映射已填值
@@ -506,6 +495,7 @@ export default {
     onTargetDatasourceChange(id) {
       if (this.formHydrating) return
       this.form.targetTable = undefined
+      this.lastAppliedTargetTable = undefined
       this.targetTableOptions = []
       this.targetFieldOptions = []
       this.form.fieldMappings = []
@@ -513,13 +503,61 @@ export default {
         this.loadTargetTables(id)
       }
     },
-    onTargetTableChange(table) {
+    /** 下拉建议：已有目标表（可过滤） */
+    queryTargetTableSuggestions(queryString, cb) {
+      const q = (queryString || '').trim().toLowerCase()
+      const set = new Set(this.targetTableOptions || [])
+      if (this.form && this.form.sourceTable) {
+        set.add(this.form.sourceTable)
+      }
+      let list = Array.from(set).filter(Boolean).map(t => ({ value: String(t) }))
+      if (q) {
+        list = list.filter(i => i.value.toLowerCase().indexOf(q) !== -1)
+      }
+      cb(list)
+    },
+    onTargetTableSelect(item) {
+      const name = item && item.value != null ? String(item.value) : ''
+      this.commitTargetTable(name, true)
+    },
+    onTargetTableBlur() {
+      this.commitTargetTable(this.form.targetTable, false)
+    },
+    /**
+     * 提交目标表名。
+     * fromSelect=true：点选已有表，换表时清空映射并拉列。
+     * 手改/新建表名：只更新表名，保留当前字段映射（改名场景）。
+     */
+    commitTargetTable(table, fromSelect) {
       if (this.formHydrating) return
-      this.targetFieldOptions = []
-      // 切换表时清空映射，避免旧目标字段残留误导；自定义新表会得到空列列表，再允许手输字段名
-      this.form.fieldMappings = []
-      if (table && this.form.targetDatasourceId) {
-        this.loadTargetFields(this.form.targetDatasourceId, table)
+      const name = table == null || table === '' ? undefined : String(table).trim()
+      if (name) {
+        this.$set(this.form, 'targetTable', name)
+      } else {
+        this.$set(this.form, 'targetTable', undefined)
+      }
+      if (name === this.lastAppliedTargetTable) {
+        return
+      }
+      const prev = this.lastAppliedTargetTable
+      this.lastAppliedTargetTable = name
+      if (!name || !this.form.targetDatasourceId) {
+        this.targetFieldOptions = []
+        return
+      }
+      const existed = this.isExistingTargetTable(name)
+      if (fromSelect || (existed && prev && this.isExistingTargetTable(prev) && prev !== name)) {
+        // 从一张已有表切到另一张：清空映射，避免目标列错位
+        this.targetFieldOptions = []
+        this.form.fieldMappings = []
+        this.loadTargetFields(this.form.targetDatasourceId, name)
+        return
+      }
+      // 自定义/改名：保留映射；若落在已有表上则补拉列候选
+      if (existed) {
+        this.loadTargetFields(this.form.targetDatasourceId, name)
+      } else {
+        this.targetFieldOptions = []
       }
     },
     /** 目标表名直接使用源表名（新建表场景常用） */
@@ -533,7 +571,7 @@ export default {
         return
       }
       this.$set(this.form, 'targetTable', this.form.sourceTable)
-      this.onTargetTableChange(this.form.sourceTable)
+      this.commitTargetTable(this.form.sourceTable, true)
     },
     /** 目标库中是否已存在该表（忽略大小写） */
     isExistingTargetTable(tableName) {
@@ -775,6 +813,7 @@ export default {
     },
     reset() {
       this.formHydrating = false
+      this.lastAppliedTargetTable = undefined
       this.form = {
         id: undefined,
         jobName: undefined,
@@ -861,6 +900,7 @@ export default {
           this.$set(this.form, 'fieldMappings', filled)
           this.$nextTick(() => this.initMappingSortable())
         }).finally(() => {
+          this.lastAppliedTargetTable = this.form.targetTable
           this.$nextTick(() => { this.formHydrating = false })
         })
       })

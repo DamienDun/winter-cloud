@@ -23,6 +23,9 @@ public class DsJobSyncResult {
     /** 自动新增列数量 */
     private int columnsAdded;
 
+    /** 自动修改列（类型/注释）数量 */
+    private int columnsModified;
+
     /** 摘要信息 */
     private String message;
 }

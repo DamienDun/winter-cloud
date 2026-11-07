@@ -151,6 +151,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             }
             rows.add(flat);
         }
+        // 若未拆出对象数组，说明响应结构可能不是列表；仍返回（可能 0 行），由作业侧决定是否失败
         return rows;
     }
 
@@ -175,45 +176,122 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         }
     }
 
+    /**
+     * 从 API 响应中拆出「业务行」列表。
+     * 优先识别 data / list / records 等对象数组，避免把整段 JSON 当成一行。
+     */
     private RowExtract extractRowItems(Object root, Object parsed, String dataItemKey) {
-        String prefix = "";
-        if (StringUtils.isNotEmpty(dataItemKey)) {
-            String key = dataItemKey.trim();
-            if (key.startsWith("jsonObject.") || key.startsWith("jsonArray.") || key.startsWith("jsonSting.")) {
-                int i = key.indexOf('.');
-                key = i >= 0 ? key.substring(i + 1) : "";
-            }
-            prefix = key;
-        }
-        List<Object> items = new ArrayList<>();
+        String configuredPrefix = normalizeDataItemKeyPrefix(dataItemKey);
         if (parsed instanceof JSONArray) {
-            JSONArray arr = (JSONArray) parsed;
-            for (int i = 0; i < arr.size(); i++) {
-                items.add(arr.get(i));
+            return new RowExtract(configuredPrefix, jsonArrayToList((JSONArray) parsed));
+        }
+
+        // 先在 dataItemKey 指向的节点上找对象数组（含 data.list 这类分页结构）
+        Object search = parsed != null ? parsed : root;
+        RowExtract found = findObjectArrayRows(search, configuredPrefix, 0);
+        if (found != null && !found.items.isEmpty()) {
+            return found;
+        }
+        // 再从根节点兜底查找（dataItemKey 配错或指向单对象时）
+        if (root != null && root != search) {
+            found = findObjectArrayRows(root, "", 0);
+            if (found != null && !found.items.isEmpty()) {
+                return found;
             }
-            return new RowExtract(prefix, items);
         }
         if (parsed instanceof JSONObject) {
-            // dataItemKey 未配置时，尝试根对象下常见列表字段
-            if (StringUtils.isEmpty(dataItemKey) && parsed == root) {
-                JSONObject obj = (JSONObject) parsed;
-                for (String candidate : new String[]{"data", "list", "rows", "records", "result", "items"}) {
-                    Object v = obj.get(candidate);
-                    if (v instanceof JSONArray) {
-                        JSONArray arr = (JSONArray) v;
-                        for (int i = 0; i < arr.size(); i++) {
-                            items.add(arr.get(i));
-                        }
-                        if (!items.isEmpty()) {
-                            return new RowExtract(candidate, items);
-                        }
-                    }
+            List<Object> one = new ArrayList<>(1);
+            one.add(parsed);
+            return new RowExtract(configuredPrefix, one);
+        }
+        return new RowExtract(configuredPrefix, new ArrayList<>());
+    }
+
+    private String normalizeDataItemKeyPrefix(String dataItemKey) {
+        if (StringUtils.isEmpty(dataItemKey)) {
+            return "";
+        }
+        String key = dataItemKey.trim();
+        if (key.startsWith("jsonObject.") || key.startsWith("jsonArray.") || key.startsWith("jsonSting.")) {
+            int i = key.indexOf('.');
+            key = i >= 0 ? key.substring(i + 1) : "";
+        }
+        return key;
+    }
+
+    private List<Object> jsonArrayToList(JSONArray arr) {
+        List<Object> items = new ArrayList<>();
+        if (arr == null) {
+            return items;
+        }
+        for (int i = 0; i < arr.size(); i++) {
+            items.add(arr.get(i));
+        }
+        return items;
+    }
+
+    private boolean isObjectArray(JSONArray arr) {
+        if (arr == null || arr.isEmpty()) {
+            return false;
+        }
+        Object first = arr.get(0);
+        return first instanceof JSONObject || first instanceof Map;
+    }
+
+    /**
+     * 递归查找「对象数组」作为同步行；常见路径优先：data/list/rows/records/...
+     */
+    private RowExtract findObjectArrayRows(Object node, String prefix, int depth) {
+        if (node == null || depth > 4) {
+            return null;
+        }
+        if (node instanceof JSONArray) {
+            JSONArray arr = (JSONArray) node;
+            if (isObjectArray(arr)) {
+                return new RowExtract(prefix, jsonArrayToList(arr));
+            }
+            return null;
+        }
+        if (!(node instanceof JSONObject)) {
+            return null;
+        }
+        JSONObject obj = (JSONObject) node;
+        String[] preferred = new String[]{"data", "list", "rows", "records", "result", "items", "content"};
+        for (String candidate : preferred) {
+            if (!obj.containsKey(candidate)) {
+                continue;
+            }
+            Object v = obj.get(candidate);
+            String nextPrefix = StringUtils.isEmpty(prefix) ? candidate : prefix + "." + candidate;
+            if (v instanceof JSONArray && isObjectArray((JSONArray) v)) {
+                return new RowExtract(nextPrefix, jsonArrayToList((JSONArray) v));
+            }
+            if (v instanceof JSONObject) {
+                RowExtract nested = findObjectArrayRows(v, nextPrefix, depth + 1);
+                if (nested != null && !nested.items.isEmpty()) {
+                    return nested;
                 }
             }
-            items.add(parsed);
-            return new RowExtract(prefix, items);
         }
-        return new RowExtract(prefix, items);
+        // 兜底：扫描其余字段，取第一个对象数组
+        for (String key : obj.keySet()) {
+            Object v = obj.get(key);
+            String nextPrefix = StringUtils.isEmpty(prefix) ? key : prefix + "." + key;
+            if (v instanceof JSONArray && isObjectArray((JSONArray) v)) {
+                return new RowExtract(nextPrefix, jsonArrayToList((JSONArray) v));
+            }
+        }
+        for (String key : obj.keySet()) {
+            Object v = obj.get(key);
+            if (v instanceof JSONObject) {
+                String nextPrefix = StringUtils.isEmpty(prefix) ? key : prefix + "." + key;
+                RowExtract nested = findObjectArrayRows(v, nextPrefix, depth + 1);
+                if (nested != null && !nested.items.isEmpty()) {
+                    return nested;
+                }
+            }
+        }
+        return null;
     }
 
     /** 与 flattenFields 类似，但保留原始类型供入库推断列类型 */

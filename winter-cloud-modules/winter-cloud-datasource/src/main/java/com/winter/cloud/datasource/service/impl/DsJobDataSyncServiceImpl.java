@@ -34,7 +34,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * 作业数据同步实现：API/JDBC 读源 → 目标 JDBC 写数；缺表建表、缺列补列
+ * 作业数据同步实现：API/JDBC 读源 → 目标 JDBC 写数；缺表建表、缺列补列、已有列按映射改类型/注释
  */
 @Service
 public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
@@ -85,6 +85,7 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
                     tool, dialect, targetDs, job.getTargetTable(), mappings, targetRows, sourceColumnMetas, apiSource);
             result.setTableCreated(schema.tableCreated);
             result.setColumnsAdded(schema.columnsAdded);
+            result.setColumnsModified(schema.columnsModified);
 
             // 全量：先清空目标表再写入；增量：直接追加
             if (Integer.valueOf(DsJobConstants.SYNC_FULL).equals(job.getSyncType())) {
@@ -96,12 +97,14 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
             result.setErrorCount(stats.errors);
             result.setMessage(String.format(
                     Locale.ROOT,
-                    "sync done: source=%d inserted=%d errors=%d tableCreated=%s columnsAdded=%d",
+                    "sync done: from=%s sourceRows=%d inserted=%d errors=%d tableCreated=%s columnsAdded=%d columnsModified=%d",
+                    apiSource ? "api" : "jdbc",
                     result.getSourceCount(),
                     result.getInsertedCount(),
                     result.getErrorCount(),
                     result.isTableCreated(),
-                    result.getColumnsAdded()));
+                    result.getColumnsAdded(),
+                    result.getColumnsModified()));
             if (stats.errors > 0 && stats.inserted == 0) {
                 throw new IllegalStateException(result.getMessage() + "; firstError=" + stats.firstError);
             }
@@ -144,15 +147,24 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
     }
 
     private List<Map<String, Object>> loadSourceRows(DsJobInfo job) {
-        String type = job.getDatasourceType() == null ? "" : job.getDatasourceType().trim().toLowerCase(Locale.ROOT);
-        if ("api".equals(type)) {
-            return apiDatasourceService.fetchDataRows(job.getDatasourceId());
+        // API 源：必须走 HTTP 拉取，禁止误走 JDBC
+        if (isApiSource(job.getDatasourceType())) {
+            if (job.getDatasourceId() == null) {
+                throw new IllegalArgumentException("api datasourceId required");
+            }
+            List<Map<String, Object>> rows = apiDatasourceService.fetchDataRows(job.getDatasourceId());
+            log.info("api sync fetched rows={}, jobId={}, apiDatasourceId={}",
+                    rows == null ? 0 : rows.size(), job.getId(), job.getDatasourceId());
+            return rows == null ? new ArrayList<>() : rows;
         }
         if (StringUtils.isEmpty(job.getSourceTable())) {
             throw new IllegalArgumentException("sourceTable required for jdbc source");
         }
         validateIdent(job.getSourceTable(), "sourceTable");
-        return loadJdbcSourceRows(job.getDatasourceId(), job.getSourceTable());
+        List<Map<String, Object>> rows = loadJdbcSourceRows(job.getDatasourceId(), job.getSourceTable());
+        log.info("jdbc sync fetched rows={}, jobId={}, table={}",
+                rows == null ? 0 : rows.size(), job.getId(), job.getSourceTable());
+        return rows;
     }
 
     private List<Map<String, Object>> loadJdbcSourceRows(Long datasourceId, String tableName) {
@@ -309,12 +321,19 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
             return outcome;
         }
 
-        Set<String> existing = listExistingColumnNames(tool, schema, tableName);
+        Map<String, ExistingColumnMeta> existingMetas = listExistingColumnMetas(tool, schema, tableName);
         String lastPresentTarget = null;
         for (DsJobFieldMapping m : orderedMappings) {
             String tf = m.getTargetField();
-            if (existing.contains(tf.toLowerCase(Locale.ROOT))) {
-                lastPresentTarget = tf;
+            String tfKey = tf.toLowerCase(Locale.ROOT);
+            ExistingColumnMeta exist = existingMetas.get(tfKey);
+            if (exist != null) {
+                lastPresentTarget = exist.name;
+                // 已有列：映射里显式改了类型/注释则 MODIFY
+                if (tryModifyExistingColumn(tool, dialect, schema, tableName, m, exist,
+                        typeSample.get(tf), sourceColumnMetas, apiSource)) {
+                    outcome.columnsModified++;
+                }
                 continue;
             }
             DsColumnDef col = buildColumnDef(m, typeSample.get(tf), sourceColumnMetas, apiSource);
@@ -326,7 +345,12 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
                 for (String sql : dialect.buildAlterColumnSqls(tableName, "ADD", col)) {
                     tool.getJdbcTemplate().execute(sql);
                 }
-                existing.add(tf.toLowerCase(Locale.ROOT));
+                ExistingColumnMeta added = new ExistingColumnMeta();
+                added.name = tf;
+                added.columnType = col.getType();
+                added.comment = col.getComment() == null ? "" : col.getComment();
+                added.nullable = !Boolean.FALSE.equals(col.getNullable());
+                existingMetas.put(tfKey, added);
                 outcome.columnsAdded++;
                 lastPresentTarget = tf;
                 log.info("auto add column {}.{}.{} type={} comment={} after={}",
@@ -335,7 +359,12 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
                 String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase(Locale.ROOT);
                 // concurrent / already-exists: treat as present and continue
                 if (msg.contains("duplicate column") || msg.contains("already exists")) {
-                    existing.add(tf.toLowerCase(Locale.ROOT));
+                    ExistingColumnMeta skipped = new ExistingColumnMeta();
+                    skipped.name = tf;
+                    skipped.columnType = col.getType();
+                    skipped.comment = col.getComment() == null ? "" : col.getComment();
+                    skipped.nullable = true;
+                    existingMetas.put(tfKey, skipped);
                     lastPresentTarget = tf;
                     log.warn("skip add column {}.{}.{}: {}", schema, tableName, tf, e.getMessage());
                     continue;
@@ -344,6 +373,73 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
             }
         }
         return outcome;
+    }
+
+    /**
+     * 对比映射配置与目标已有列；类型或注释有差异则执行 MODIFY。
+     * @return true 表示已执行修改
+     */
+    private boolean tryModifyExistingColumn(AbstractDsQueryTool tool,
+                                            DsDdlDialect dialect,
+                                            String schema,
+                                            String tableName,
+                                            DsJobFieldMapping mapping,
+                                            ExistingColumnMeta exist,
+                                            Object sampleValue,
+                                            Map<String, SourceColumnMeta> sourceColumnMetas,
+                                            boolean apiSource) {
+        boolean typeConfigured = StringUtils.isNotEmpty(mapping.getTargetType());
+        boolean commentConfigured = StringUtils.isNotEmpty(mapping.getTargetComment());
+        if (!typeConfigured && !commentConfigured) {
+            return false;
+        }
+
+        DsColumnDef desired = buildColumnDef(mapping, sampleValue, sourceColumnMetas, apiSource);
+        // 改类型时保留目标列可空性，避免误加/误删 NOT NULL
+        desired.setNullable(exist.nullable);
+        desired.setPrimaryKey(false);
+
+        String existType = normalizeRawType(exist.columnType);
+        String desiredType = normalizeRawType(desired.getType());
+        String existComment = exist.comment == null ? "" : exist.comment;
+        String desiredComment = desired.getComment() == null ? "" : desired.getComment();
+
+        boolean typeDiff = typeConfigured && desiredType != null && !sameSqlType(desiredType, existType);
+        boolean commentDiff = commentConfigured && !desiredComment.equals(existComment);
+        if (!typeDiff && !commentDiff) {
+            return false;
+        }
+        // 只改注释时沿用库中类型；只改类型时沿用库中注释（若映射未配注释）
+        if (!typeDiff) {
+            desired.setType(existType != null ? existType : exist.columnType);
+        }
+        if (!commentDiff) {
+            desired.setComment(existComment);
+        }
+
+        try {
+            for (String sql : dialect.buildAlterColumnSqls(tableName, "MODIFY", desired)) {
+                tool.getJdbcTemplate().execute(sql);
+            }
+            exist.columnType = desired.getType();
+            exist.comment = desired.getComment() == null ? "" : desired.getComment();
+            log.info("auto modify column {}.{}.{} type {} -> {}, comment='{}'",
+                    schema, tableName, exist.name, existType, desired.getType(), exist.comment);
+            return true;
+        } catch (IllegalArgumentException e) {
+            // 部分方言不支持 MODIFY（如 Presto）
+            log.warn("skip modify column {}.{}.{}: {}", schema, tableName, exist.name, e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean sameSqlType(String a, String b) {
+        String na = normalizeRawType(a);
+        String nb = normalizeRawType(b);
+        if (na == null || nb == null) {
+            return false;
+        }
+        return na.equals(nb);
     }
 
     private boolean isMysqlLike(String datasourceType) {
@@ -410,20 +506,31 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
         return db.isEmpty() ? null : db;
     }
 
-    /** Prefer information_schema with explicit schema name. */
-    private Set<String> listExistingColumnNames(AbstractDsQueryTool tool, String schema, String tableName) {
-        Set<String> existing = new LinkedHashSet<>();
+    /** Prefer information_schema with explicit schema name（含类型/注释，供 MODIFY 对比）. */
+    private Map<String, ExistingColumnMeta> listExistingColumnMetas(AbstractDsQueryTool tool,
+                                                                    String schema,
+                                                                    String tableName) {
+        Map<String, ExistingColumnMeta> existing = new LinkedHashMap<>();
         try {
             List<Map<String, Object>> rows = tool.getJdbcTemplate().queryForList(
-                    "SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS "
-                            + "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+                    "SELECT COLUMN_NAME AS name, COLUMN_TYPE AS columnType, "
+                            + "IFNULL(COLUMN_COMMENT,'') AS columnComment, IS_NULLABLE AS isNullable "
+                            + "FROM information_schema.COLUMNS "
+                            + "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? "
+                            + "ORDER BY ORDINAL_POSITION",
                     schema, tableName);
             if (rows != null) {
                 for (Map<String, Object> row : rows) {
                     Object name = row.get("name");
-                    if (name != null) {
-                        existing.add(String.valueOf(name).toLowerCase(Locale.ROOT));
+                    if (name == null) {
+                        continue;
                     }
+                    ExistingColumnMeta meta = new ExistingColumnMeta();
+                    meta.name = String.valueOf(name);
+                    meta.columnType = row.get("columnType") == null ? "" : String.valueOf(row.get("columnType"));
+                    meta.comment = row.get("columnComment") == null ? "" : String.valueOf(row.get("columnComment"));
+                    meta.nullable = !"NO".equalsIgnoreCase(String.valueOf(row.get("isNullable")));
+                    existing.put(meta.name.toLowerCase(Locale.ROOT), meta);
                 }
             }
             log.info("target schema={}, table={}, existingColumns={}", schema, tableName, existing.size());
@@ -434,9 +541,15 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
             return existing;
         }
         for (ColumnInfo col : tool.getColumnInfos(tableName)) {
-            if (col != null && StringUtils.isNotEmpty(col.getName())) {
-                existing.add(col.getName().toLowerCase(Locale.ROOT));
+            if (col == null || StringUtils.isEmpty(col.getName())) {
+                continue;
             }
+            ExistingColumnMeta meta = new ExistingColumnMeta();
+            meta.name = col.getName();
+            meta.columnType = col.getType() == null ? "" : col.getType();
+            meta.comment = col.getComment() == null ? "" : col.getComment();
+            meta.nullable = col.getAllowNull() != 0;
+            existing.put(meta.name.toLowerCase(Locale.ROOT), meta);
         }
         return existing;
     }
@@ -525,10 +638,14 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
         if (t.startsWith("bit")) {
             return "tinyint(1)";
         }
-        if ("int".equals(t) || "integer".equals(t)) {
-            return "int";
+        // MySQL 显示宽度：bigint(20)/int(11) 与 bigint/int 视为同类；tinyint(1) 保留
+        if (t.matches("^(tinyint|smallint|mediumint|int|integer|bigint)\\(\\d+\\)$")) {
+            if (t.startsWith("tinyint(1)")) {
+                return "tinyint(1)";
+            }
+            t = t.replaceAll("\\(\\d+\\)", "");
         }
-        if ("int(11)".equals(t)) {
+        if ("integer".equals(t)) {
             return "int";
         }
         return t;
@@ -678,6 +795,7 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
     private static final class EnsureSchemaOutcome {
         private boolean tableCreated;
         private int columnsAdded;
+        private int columnsModified;
     }
 
     private static final class WriteStats {
@@ -695,5 +813,13 @@ public class DsJobDataSyncServiceImpl implements IDsJobDataSyncService {
         private boolean primaryKey;
         /** information_schema.ORDINAL_POSITION */
         private int ordinalPosition;
+    }
+
+    /** 目标表已有列元数据（用于与映射对比后决定是否 MODIFY） */
+    private static final class ExistingColumnMeta {
+        private String name;
+        private String columnType;
+        private String comment = "";
+        private boolean nullable = true;
     }
 }
