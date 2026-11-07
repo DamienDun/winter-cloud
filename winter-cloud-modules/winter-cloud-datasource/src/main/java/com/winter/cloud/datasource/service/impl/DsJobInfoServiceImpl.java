@@ -7,9 +7,11 @@ import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.security.utils.SecurityUtils;
 import com.winter.cloud.datasource.constant.DsJobConstants;
 import com.winter.cloud.datasource.domain.dto.DsJobExecuteParam;
+import com.winter.cloud.datasource.domain.entity.DsApiDatasource;
 import com.winter.cloud.datasource.domain.entity.DsJdbcDatasource;
 import com.winter.cloud.datasource.domain.entity.DsJobInfo;
 import com.winter.cloud.datasource.mapper.DsJobInfoMapper;
+import com.winter.cloud.datasource.service.IDsApiDatasourceService;
 import com.winter.cloud.datasource.service.IDsJdbcDatasourceService;
 import com.winter.cloud.datasource.service.IDsJobInfoService;
 import com.winter.cloud.datasource.support.XxlJobBindHelper;
@@ -31,6 +33,9 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
 
     @Autowired
     private IDsJdbcDatasourceService datasourceService;
+
+    @Autowired
+    private IDsApiDatasourceService apiDatasourceService;
 
     @Autowired
     private XxlJobBindHelper xxlJobBindHelper;
@@ -177,12 +182,29 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
         if (entity.getDatasourceId() == null) {
             throw new IllegalArgumentException("datasourceId required");
         }
+        // 按类型解析：api → API数据源；mysql/oracle/... → JDBC数据源
+        if ("api".equalsIgnoreCase(entity.getDatasourceType())) {
+            DsApiDatasource api = apiDatasourceService.selectById(entity.getDatasourceId());
+            if (api == null) {
+                throw new IllegalArgumentException("api datasource not found");
+            }
+            entity.setDatasourceName(api.getDatasourceName());
+            entity.setDatasourceType("api");
+            return;
+        }
         DsJdbcDatasource ds = datasourceService.selectById(entity.getDatasourceId());
-        if (ds == null) {
+        if (ds != null) {
+            entity.setDatasourceName(ds.getDatasourceName());
+            entity.setDatasourceType(ds.getDatasourceType());
+            return;
+        }
+        // 兼容：未传类型或类型不准时再试 API
+        DsApiDatasource api = apiDatasourceService.selectById(entity.getDatasourceId());
+        if (api == null) {
             throw new IllegalArgumentException("datasource not found");
         }
-        entity.setDatasourceName(ds.getDatasourceName());
-        entity.setDatasourceType(ds.getDatasourceType());
+        entity.setDatasourceName(api.getDatasourceName());
+        entity.setDatasourceType("api");
     }
 
     private void normalizeDefaults(DsJobInfo entity) {

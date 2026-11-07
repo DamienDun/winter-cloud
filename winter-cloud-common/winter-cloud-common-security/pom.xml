@@ -22,6 +22,12 @@
             <artifactId>spring-webmvc</artifactId>
         </dependency>
 
+        <!-- Jackson Java8 时间序列化（全局 LocalDateTime 等） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
         <!-- RuoYi Api System -->
         <dependency>
             <groupId>com.winter</groupId>

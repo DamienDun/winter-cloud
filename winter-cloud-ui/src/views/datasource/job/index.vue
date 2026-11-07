@@ -39,6 +39,7 @@
     <el-table v-loading="loading" :data="dataList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="作业名称" align="center" prop="jobName" min-width="140" :show-overflow-tooltip="true" />
+      <el-table-column label="类型" align="center" prop="datasourceType" width="100" />
       <el-table-column label="数据源" align="center" prop="datasourceName" min-width="120" :show-overflow-tooltip="true" />
       <el-table-column label="同步" align="center" prop="syncType" width="80">
         <template slot-scope="scope">{{ scope.row.syncType === 1 ? '增量' : '全量' }}</template>
@@ -75,9 +76,26 @@
         <el-form-item label="作业名称" prop="jobName">
           <el-input v-model="form.jobName" placeholder="请输入作业名称" />
         </el-form-item>
+        <el-form-item label="数据源类型" prop="datasourceType">
+          <el-select v-model="form.datasourceType" placeholder="请先选择数据源类型" style="width: 100%" @change="onDatasourceTypeChange">
+            <el-option v-for="t in typeOptions" :key="t.value" :label="t.label" :value="t.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="数据源" prop="datasourceId">
-          <el-select v-model="form.datasourceId" placeholder="请选择数据源" filterable style="width: 100%">
-            <el-option v-for="ds in datasourceOptions" :key="ds.id" :label="ds.datasourceName + ' (' + ds.datasourceType + ')'" :value="ds.id" />
+          <el-select
+            v-model="form.datasourceId"
+            placeholder="请选择数据源"
+            filterable
+            style="width: 100%"
+            :disabled="!form.datasourceType"
+            :loading="dsLoading"
+          >
+            <el-option
+              v-for="ds in datasourceOptions"
+              :key="String(ds.id)"
+              :label="ds.datasourceName"
+              :value="String(ds.id)"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="同步方式" prop="syncType">
@@ -93,11 +111,8 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="Cron" prop="cron" v-if="form.triggerType === 1">
-          <el-input v-model="form.cron" placeholder="如 0 0/5 * * * ?" style="width: 70%" />
-          <el-button type="text" @click="previewCron" style="margin-left: 8px">预览下次</el-button>
-          <div v-if="cronPreview.length" style="color: #909399; font-size: 12px; line-height: 1.6; margin-top: 4px">
-            <div v-for="(t, i) in cronPreview" :key="i">{{ t }}</div>
-          </div>
+          <!-- 与 XXL-JOB 任务页同一套 cronGen -->
+          <xxl-cron-gen v-model="form.cron" />
         </el-form-item>
         <el-form-item label="生效时间">
           <el-date-picker v-model="effectiveRange" type="datetimerange" value-format="yyyy-MM-dd HH:mm:ss" range-separator="至" start-placeholder="开始" end-placeholder="结束" style="width: 100%" />
@@ -115,14 +130,18 @@
 </template>
 
 <script>
-import { listJob, getJob, addJob, updateJob, delJob, startJob, stopJob, executeJob, nextTriggerTime } from '@/api/datasource/job'
+import { listJob, getJob, addJob, updateJob, delJob, startJob, stopJob, executeJob } from '@/api/datasource/job'
 import { listAllDatasource } from '@/api/datasource/info'
+import { listApiDatasource } from '@/api/datasource/api'
+import XxlCronGen from '@/views/xxljob/components/XxlCronGen'
 
 export default {
   name: 'DatasourceJob',
+  components: { XxlCronGen },
   data() {
     return {
       loading: false,
+      dsLoading: false,
       showSearch: true,
       total: 0,
       dataList: [],
@@ -131,8 +150,18 @@ export default {
       multiple: true,
       open: false,
       title: '',
+      jdbcAllOptions: [],
       datasourceOptions: [],
-      cronPreview: [],
+      typeOptions: [
+        { value: 'api', label: 'API' },
+        { value: 'mysql', label: 'MySQL' },
+        { value: 'oracle', label: 'Oracle' },
+        { value: 'postgresql', label: 'PostgreSQL' },
+        { value: 'sqlserver', label: 'SQLServer' },
+        { value: 'hive', label: 'Hive' },
+        { value: 'clickhouse', label: 'ClickHouse' },
+        { value: 'presto', label: 'Presto' }
+      ],
       effectiveRange: [],
       queryParams: {
         pageNum: 1,
@@ -144,6 +173,7 @@ export default {
       form: {},
       rules: {
         jobName: [{ required: true, message: '作业名称不能为空', trigger: 'blur' }],
+        datasourceType: [{ required: true, message: '请选择数据源类型', trigger: 'change' }],
         datasourceId: [{ required: true, message: '请选择数据源', trigger: 'change' }],
         syncType: [{ required: true, message: '请选择同步方式', trigger: 'change' }],
         triggerType: [{ required: true, message: '请选择触发方式', trigger: 'change' }],
@@ -153,7 +183,7 @@ export default {
   },
   created() {
     this.getList()
-    this.loadDatasources()
+    this.loadJdbcAll()
   },
   methods: {
     getList() {
@@ -164,10 +194,52 @@ export default {
         this.loading = false
       }).catch(() => { this.loading = false })
     },
-    loadDatasources() {
-      listAllDatasource().then(res => {
-        this.datasourceOptions = res.data || []
+    loadJdbcAll() {
+      return listAllDatasource().then(res => {
+        this.jdbcAllOptions = (res.data || []).map(i => ({
+          ...i,
+          id: i.id != null ? String(i.id) : i.id
+        }))
+        return this.jdbcAllOptions
+      }).catch(() => {
+        this.jdbcAllOptions = []
+        return []
       })
+    },
+    /** 按类型加载下拉：api → API数据源；其它 → JDBC 中对应类型 */
+    loadDatasourcesByType(type) {
+      if (!type) {
+        this.datasourceOptions = []
+        return Promise.resolve([])
+      }
+      this.dsLoading = true
+      const done = list => {
+        this.datasourceOptions = list
+        this.dsLoading = false
+        return list
+      }
+      if (type === 'api') {
+        return listApiDatasource({ pageNum: 1, pageSize: 500, status: 1 }).then(res => {
+          const list = (res.rows || []).map(i => ({
+            id: i.id != null ? String(i.id) : i.id,
+            datasourceName: i.datasourceName,
+            datasourceType: 'api'
+          }))
+          return done(list)
+        }).catch(() => done([]))
+      }
+      const applyJdbc = () => {
+        const list = (this.jdbcAllOptions || []).filter(i => i.datasourceType === type)
+        return done(list)
+      }
+      if (!this.jdbcAllOptions.length) {
+        return this.loadJdbcAll().then(applyJdbc).catch(() => done([]))
+      }
+      return Promise.resolve(applyJdbc())
+    },
+    onDatasourceTypeChange(type) {
+      this.form.datasourceId = undefined
+      this.loadDatasourcesByType(type)
     },
     handleQuery() {
       this.queryParams.pageNum = 1
@@ -195,30 +267,21 @@ export default {
       this.form = {
         id: undefined,
         jobName: undefined,
+        datasourceType: undefined,
         datasourceId: undefined,
         syncType: 0,
         triggerType: 0,
         cron: '',
         remark: undefined
       }
+      this.datasourceOptions = []
       this.effectiveRange = []
-      this.cronPreview = []
       this.resetForm('form')
     },
     onTriggerChange() {
       if (this.form.triggerType !== 1) {
         this.form.cron = ''
-        this.cronPreview = []
       }
-    },
-    previewCron() {
-      if (!this.form.cron) {
-        this.$modal.msgWarning('请先填写Cron')
-        return
-      }
-      nextTriggerTime(this.form.cron).then(res => {
-        this.cronPreview = res.data || []
-      })
     },
     handleAdd() {
       this.reset()
@@ -227,14 +290,23 @@ export default {
     },
     handleUpdate(row) {
       this.reset()
-      const id = row && row.id != null ? row.id : this.ids[0]
+      const id = row && row.id != null ? String(row.id) : String(this.ids[0])
       getJob(id).then(res => {
-        this.form = Object.assign({}, res.data || {})
+        const data = Object.assign({}, res.data || {})
+        if (data.id != null) data.id = String(data.id)
+        if (data.datasourceId != null) data.datasourceId = String(data.datasourceId)
+        this.form = data
         if (this.form.effectiveTimeBegin && this.form.effectiveTimeEnd) {
           this.effectiveRange = [this.form.effectiveTimeBegin, this.form.effectiveTimeEnd]
         }
         this.open = true
         this.title = '修改作业'
+        // 先按类型加载候选项，再回填数据源ID
+        const dsId = this.form.datasourceId
+        this.form.datasourceId = undefined
+        this.loadDatasourcesByType(this.form.datasourceType).then(() => {
+          this.$set(this.form, 'datasourceId', dsId)
+        })
       })
     },
     cancel() {
