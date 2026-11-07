@@ -3,8 +3,10 @@ package com.winter.cloud.datasource.job;
 import com.alibaba.fastjson2.JSON;
 import com.winter.cloud.datasource.constant.DsJobConstants;
 import com.winter.cloud.datasource.domain.dto.DsJobExecuteParam;
+import com.winter.cloud.datasource.domain.dto.DsJobSyncResult;
 import com.winter.cloud.datasource.domain.entity.DsJobInfo;
 import com.winter.cloud.datasource.domain.entity.DsJobLog;
+import com.winter.cloud.datasource.service.IDsJobDataSyncService;
 import com.winter.cloud.datasource.service.IDsJobInfoService;
 import com.winter.cloud.datasource.service.IDsJobLogService;
 import com.xxl.job.core.context.XxlJobHelper;
@@ -17,8 +19,7 @@ import org.springframework.stereotype.Component;
 import java.util.Date;
 
 /**
- * Datasource job handler: write job log and patch last execute status.
- * Sync business logic can be extended later; current skeleton closes the schedule loop.
+ * 数据源作业执行器：从 API/JDBC 源取数，按字段映射写入目标 JDBC（缺表建表、缺列补列）
  */
 @Component
 public class DatasourceJobHandler {
@@ -30,6 +31,9 @@ public class DatasourceJobHandler {
 
     @Autowired
     private IDsJobLogService jobLogService;
+
+    @Autowired
+    private IDsJobDataSyncService jobDataSyncService;
 
     @XxlJob(DsJobConstants.EXECUTOR_HANDLER)
     public void datasourceJobHandler() {
@@ -61,16 +65,15 @@ public class DatasourceJobHandler {
         jobInfoService.patchExecuteStatus(job.getId(), DsJobConstants.LAST_EXEC_RUNNING, begin);
 
         try {
-            String msg = "job finished (skeleton): jobId=" + job.getId()
-                    + ", datasource=" + job.getDatasourceName()
-                    + ", syncType=" + job.getSyncType();
+            DsJobSyncResult syncResult = jobDataSyncService.sync(job);
             Date end = new Date();
+            String msg = syncResult.getMessage() == null ? "job finished" : syncResult.getMessage();
             jobLog.setExecuteStatus(DsJobConstants.LOG_SUCCESS);
             jobLog.setExecuteEndTime(end);
             jobLog.setTimeConsuming((end.getTime() - begin.getTime()) + "ms");
-            jobLog.setHandleDataTotal(0);
-            jobLog.setActualUpdateDataTotal(0);
-            jobLog.setErrorDataTotal(0);
+            jobLog.setHandleDataTotal(syncResult.getSourceCount());
+            jobLog.setActualUpdateDataTotal(syncResult.getInsertedCount());
+            jobLog.setErrorDataTotal(syncResult.getErrorCount());
             jobLog.setJobMessage(msg);
             jobLogService.update(jobLog);
 
@@ -82,7 +85,7 @@ public class DatasourceJobHandler {
             jobLog.setExecuteStatus(DsJobConstants.LOG_FAIL);
             jobLog.setExecuteEndTime(end);
             jobLog.setTimeConsuming((end.getTime() - begin.getTime()) + "ms");
-            jobLog.setJobMessage(e.getMessage());
+            jobLog.setJobMessage(e.getMessage() == null ? e.toString() : e.getMessage());
             jobLogService.update(jobLog);
 
             jobInfoService.patchExecuteStatus(job.getId(), DsJobConstants.LAST_EXEC_FAIL, end);

@@ -71,8 +71,14 @@ public class MysqlDdlDialect extends AbstractDsDdlDialect {
     public List<String> buildAlterColumnSqls(String tableName, String action, DsColumnDef column) {
         String qTable = quote(tableName);
         switch (action) {
-            case "ADD":
-                return Collections.singletonList("ALTER TABLE " + qTable + " ADD COLUMN " + buildInlineColumnClause(column, true));
+            case "ADD": {
+                String add = "ALTER TABLE " + qTable + " ADD COLUMN " + buildInlineColumnClause(column, true);
+                // 与源表顺序对齐：插到指定列之后
+                if (StringUtils.isNotEmpty(column.getAfterColumn())) {
+                    add = add + " AFTER " + quote(column.getAfterColumn());
+                }
+                return Collections.singletonList(add);
+            }
             case "MODIFY":
                 return Collections.singletonList("ALTER TABLE " + qTable + " MODIFY COLUMN " + buildInlineColumnClause(column, true));
             case "DROP":

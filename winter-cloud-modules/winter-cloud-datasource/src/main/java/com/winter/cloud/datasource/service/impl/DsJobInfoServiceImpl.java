@@ -69,9 +69,11 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
         if (xxlJobId == null) {
             return null;
         }
-        return jobInfoMapper.selectOne(Wrappers.<DsJobInfo>lambdaQuery()
+        DsJobInfo job = jobInfoMapper.selectOne(Wrappers.<DsJobInfo>lambdaQuery()
                 .eq(DsJobInfo::getXxlJobId, xxlJobId)
                 .last("limit 1"));
+        fillFieldMappings(job);
+        return job;
     }
 
     @Override
@@ -244,6 +246,7 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
                 if (StringUtils.isEmpty(item.getSourceField()) || StringUtils.isEmpty(item.getTargetField())) {
                     continue;
                 }
+                // 保留列表顺序，以及可选的目标类型/注释
                 cleaned.add(item);
             }
             if (cleaned.isEmpty()) {

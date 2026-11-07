@@ -32,4 +32,9 @@ public class DsColumnDef {
 
     /** old column name when renaming */
     private String oldName;
+
+    /**
+     * MySQL ADD COLUMN ... AFTER xxx（用于与源表字段顺序对齐）
+     */
+    private String afterColumn;
 }

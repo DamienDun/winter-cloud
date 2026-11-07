@@ -110,6 +110,148 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
     }
 
     @Override
+    public List<Map<String, Object>> fetchDataRows(Long id) {
+        DsApiDatasource ds = selectById(id);
+        if (ds == null) {
+            throw new IllegalArgumentException("datasource not found");
+        }
+        Map<String, String> relyValues = resolveRelyValues(ds.getRelyDatasourceId());
+        DsApiTestResult test = doHttpRequest(ds, relyValues);
+        if (test.getTestStatus() == null || test.getTestStatus() != 0) {
+            throw new IllegalStateException("api call failed: " + test.getTestResult());
+        }
+        Object root = parseRootJson(test.getTestResult());
+        String dataItemKey = ds.getDataItemKey();
+        Object parsed = parseByDataItemKey(dataItemKey, test.getTestResult());
+        RowExtract extract = extractRowItems(root, parsed, dataItemKey);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Object item : extract.items) {
+            if (!(item instanceof JSONObject) && !(item instanceof Map)) {
+                continue;
+            }
+            Map<String, Object> flat = new LinkedHashMap<>();
+            flattenValueFields("", item, flat, 0);
+            if (StringUtils.isNotEmpty(extract.prefix)) {
+                // 同步一份带容器前缀的 key，兼容映射里的 data.xxx
+                Map<String, Object> prefixed = new LinkedHashMap<>();
+                for (Map.Entry<String, Object> e : flat.entrySet()) {
+                    prefixed.put(extract.prefix + "." + e.getKey(), e.getValue());
+                }
+                flat.putAll(prefixed);
+            }
+            // 根级标量（code/msg）挂到每行，便于映射
+            if (root instanceof JSONObject) {
+                JSONObject rootObj = (JSONObject) root;
+                for (String key : rootObj.keySet()) {
+                    Object val = rootObj.get(key);
+                    if (!(val instanceof JSONObject) && !(val instanceof JSONArray) && !(val instanceof Map) && !(val instanceof List)) {
+                        flat.putIfAbsent(key, val);
+                    }
+                }
+            }
+            rows.add(flat);
+        }
+        return rows;
+    }
+
+    private Object parseRootJson(String raw) {
+        if (StringUtils.isEmpty(raw)) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.startsWith("[")) {
+            return JSON.parseArray(trimmed);
+        }
+        return JSON.parseObject(trimmed);
+    }
+
+    private static final class RowExtract {
+        private final String prefix;
+        private final List<Object> items;
+
+        private RowExtract(String prefix, List<Object> items) {
+            this.prefix = prefix == null ? "" : prefix;
+            this.items = items;
+        }
+    }
+
+    private RowExtract extractRowItems(Object root, Object parsed, String dataItemKey) {
+        String prefix = "";
+        if (StringUtils.isNotEmpty(dataItemKey)) {
+            String key = dataItemKey.trim();
+            if (key.startsWith("jsonObject.") || key.startsWith("jsonArray.") || key.startsWith("jsonSting.")) {
+                int i = key.indexOf('.');
+                key = i >= 0 ? key.substring(i + 1) : "";
+            }
+            prefix = key;
+        }
+        List<Object> items = new ArrayList<>();
+        if (parsed instanceof JSONArray) {
+            JSONArray arr = (JSONArray) parsed;
+            for (int i = 0; i < arr.size(); i++) {
+                items.add(arr.get(i));
+            }
+            return new RowExtract(prefix, items);
+        }
+        if (parsed instanceof JSONObject) {
+            // dataItemKey 未配置时，尝试根对象下常见列表字段
+            if (StringUtils.isEmpty(dataItemKey) && parsed == root) {
+                JSONObject obj = (JSONObject) parsed;
+                for (String candidate : new String[]{"data", "list", "rows", "records", "result", "items"}) {
+                    Object v = obj.get(candidate);
+                    if (v instanceof JSONArray) {
+                        JSONArray arr = (JSONArray) v;
+                        for (int i = 0; i < arr.size(); i++) {
+                            items.add(arr.get(i));
+                        }
+                        if (!items.isEmpty()) {
+                            return new RowExtract(candidate, items);
+                        }
+                    }
+                }
+            }
+            items.add(parsed);
+            return new RowExtract(prefix, items);
+        }
+        return new RowExtract(prefix, items);
+    }
+
+    /** 与 flattenFields 类似，但保留原始类型供入库推断列类型 */
+    private void flattenValueFields(String prefix, Object node, Map<String, Object> out, int depth) {
+        if (node == null || depth > 6) {
+            return;
+        }
+        if (node instanceof JSONObject) {
+            JSONObject obj = (JSONObject) node;
+            for (String key : obj.keySet()) {
+                Object val = obj.get(key);
+                String path = StringUtils.isEmpty(prefix) ? key : prefix + "." + key;
+                if (val instanceof JSONObject) {
+                    flattenValueFields(path, val, out, depth + 1);
+                } else if (val instanceof JSONArray) {
+                    out.put(path, val == null ? null : String.valueOf(val));
+                } else {
+                    out.put(path, val);
+                }
+            }
+        } else if (node instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) node;
+            for (Map.Entry<String, Object> e : map.entrySet()) {
+                Object val = e.getValue();
+                String path = StringUtils.isEmpty(prefix) ? e.getKey() : prefix + "." + e.getKey();
+                if (val instanceof Map || val instanceof JSONObject) {
+                    flattenValueFields(path, val, out, depth + 1);
+                } else {
+                    out.put(path, val);
+                }
+            }
+        } else if (StringUtils.isNotEmpty(prefix)) {
+            out.put(prefix, node);
+        }
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public int insert(DsApiDatasource entity) {
         normalize(entity);

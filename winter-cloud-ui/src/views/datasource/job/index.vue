@@ -73,7 +73,7 @@
 
     <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
 
-    <el-dialog :title="title" :visible.sync="open" width="860px" append-to-body>
+    <el-dialog :title="title" :visible.sync="open" width="1100px" append-to-body>
       <el-form ref="form" :model="form" :rules="rules" label-width="110px" size="small">
         <el-form-item label="作业名称" prop="jobName">
           <el-input v-model="form.jobName" placeholder="请输入作业名称" />
@@ -161,25 +161,56 @@
             <el-button type="text" icon="el-icon-magic-stick" :disabled="!canAutoMap" @click="autoMapFields">同名自动映射</el-button>
             <el-button type="text" icon="el-icon-copy-document" :disabled="!sourceFieldOptions.length" @click="mapBySourceFieldNames">同源字段名</el-button>
             <el-button type="text" icon="el-icon-delete" :disabled="!(form.fieldMappings && form.fieldMappings.length)" @click="clearFieldMappings">一键清空</el-button>
-            <div style="color: #909399; font-size: 12px; margin: 0 0 6px;">目标字段为可编辑输入框（可直接删掉 data. 等前缀），聚焦时可从已有列中选</div>
-            <el-table :data="form.fieldMappings" size="mini" border empty-text="请添加字段映射">
-              <el-table-column label="源字段" min-width="180">
+            <div style="color: #909399; font-size: 12px; margin: 0 0 6px;">
+              可拖拽「拖拽」列调整顺序（即建表字段顺序）；类型空时 API 默认 varchar(255)、JDBC 沿用源类型；注释空则沿用源注释。改成可能不兼容的类型会提示。
+            </div>
+            <el-table ref="mappingTable" :data="form.fieldMappings" size="mini" border empty-text="请添加字段映射" row-key="_rowKey">
+              <el-table-column label="拖拽" width="56" align="center">
                 <template slot-scope="scope">
-                  <el-select v-model="scope.row.sourceField" filterable clearable placeholder="源字段" style="width: 100%">
+                  <i class="el-icon-rank mapping-drag-handle" title="拖拽调整顺序" />
+                </template>
+              </el-table-column>
+              <el-table-column label="源字段" min-width="150">
+                <template slot-scope="scope">
+                  <el-select
+                    v-model="scope.row.sourceField"
+                    filterable
+                    clearable
+                    placeholder="源字段"
+                    style="width: 100%"
+                    @change="onSourceFieldPicked(scope.row)"
+                  >
                     <el-option v-for="f in sourceFieldOptions" :key="'s-' + f" :label="f" :value="f" />
                   </el-select>
                 </template>
               </el-table-column>
-              <el-table-column label="目标字段" min-width="180">
+              <el-table-column label="目标字段" min-width="130">
                 <template slot-scope="scope">
-                  <!-- 用 autocomplete 才能像普通输入框一样改字（select 选中后无法删前缀） -->
                   <el-autocomplete
                     v-model="scope.row.targetField"
                     :fetch-suggestions="(q, cb) => queryTargetFieldSuggestions(q, cb, scope.row)"
                     clearable
-                    placeholder="可编辑目标字段名"
+                    placeholder="目标字段名"
                     style="width: 100%"
                   />
+                </template>
+              </el-table-column>
+              <el-table-column label="目标类型" min-width="140">
+                <template slot-scope="scope">
+                  <el-autocomplete
+                    v-model="scope.row.targetType"
+                    :fetch-suggestions="queryTypeSuggestions"
+                    clearable
+                    :placeholder="isApiSource ? '默认varchar(255)' : '默认沿用源类型'"
+                    style="width: 100%"
+                    @change="onTargetTypeChange(scope.row)"
+                    @select="() => onTargetTypeChange(scope.row)"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="字段注释" min-width="140">
+                <template slot-scope="scope">
+                  <el-input v-model="scope.row.targetComment" clearable :placeholder="isApiSource ? '可选' : '默认沿用源注释'" />
                 </template>
               </el-table-column>
               <el-table-column width="50" align="center">
@@ -227,12 +258,15 @@ import { listAllDatasource } from '@/api/datasource/info'
 import { listApiDatasource, listApiOutputFields } from '@/api/datasource/api'
 import { listTables, listColumns } from '@/api/datasource/data'
 import XxlCronGen from '@/views/xxljob/components/XxlCronGen'
+import Sortable from 'sortablejs'
 
 export default {
   name: 'DatasourceJob',
   components: { XxlCronGen },
   data() {
     return {
+      mappingSortable: null,
+      mappingRowKeySeq: 1,
       loading: false,
       dsLoading: false,
       sourceTableLoading: false,
@@ -252,7 +286,14 @@ export default {
       sourceTableOptions: [],
       targetTableOptions: [],
       sourceFieldOptions: [],
+      /** JDBC 源字段元数据：{ name: { type, comment } } */
+      sourceFieldMetaMap: {},
       targetFieldOptions: [],
+      commonSqlTypes: [
+        'varchar(64)', 'varchar(128)', 'varchar(255)', 'varchar(512)',
+        'text', 'bigint', 'int', 'tinyint(1)', 'decimal(20,6)',
+        'datetime', 'date', 'json'
+      ],
       typeOptions: [
         { value: 'api', label: 'API' },
         { value: 'mysql', label: 'MySQL' },
@@ -285,6 +326,9 @@ export default {
     }
   },
   computed: {
+    isApiSource() {
+      return this.form && this.form.datasourceType === 'api'
+    },
     canAutoMap() {
       // 有源字段即可：目标有列则做交集；无列则按源字段同名生成
       return this.sourceFieldOptions.length > 0
@@ -329,7 +373,52 @@ export default {
     this.getList()
     this.loadJdbcAll()
   },
+  watch: {
+    open(val) {
+      if (val) {
+        this.$nextTick(() => this.initMappingSortable())
+      } else {
+        this.destroyMappingSortable()
+      }
+    }
+  },
+  beforeDestroy() {
+    this.destroyMappingSortable()
+  },
   methods: {
+    initMappingSortable() {
+      this.destroyMappingSortable()
+      const table = this.$refs.mappingTable
+      if (!table || !table.$el) return
+      const el = table.$el.querySelector('.el-table__body-wrapper > table > tbody')
+      if (!el) return
+      this.mappingSortable = Sortable.create(el, {
+        handle: '.mapping-drag-handle',
+        animation: 150,
+        ghostClass: 'mapping-row-ghost',
+        onEnd: evt => {
+          const oldIndex = evt.oldIndex
+          const newIndex = evt.newIndex
+          if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+          const list = this.form.fieldMappings
+          if (!list || !list.length) return
+          const row = list.splice(oldIndex, 1)[0]
+          list.splice(newIndex, 0, row)
+        }
+      })
+    },
+    destroyMappingSortable() {
+      if (this.mappingSortable) {
+        this.mappingSortable.destroy()
+        this.mappingSortable = null
+      }
+    },
+    ensureMappingRowKey(row) {
+      if (row && row._rowKey == null) {
+        this.$set(row, '_rowKey', 'm-' + (this.mappingRowKeySeq++))
+      }
+      return row
+    },
     getList() {
       this.loading = true
       listJob(this.queryParams).then(res => {
@@ -387,6 +476,7 @@ export default {
       this.form.sourceTable = undefined
       this.sourceTableOptions = []
       this.sourceFieldOptions = []
+      this.sourceFieldMetaMap = {}
       this.form.fieldMappings = []
       this.loadDatasourcesByType(type)
     },
@@ -395,6 +485,7 @@ export default {
       this.form.sourceTable = undefined
       this.sourceTableOptions = []
       this.sourceFieldOptions = []
+      this.sourceFieldMetaMap = {}
       this.form.fieldMappings = []
       if (!id) return
       if (this.form.datasourceType === 'api') {
@@ -406,6 +497,7 @@ export default {
     onSourceTableChange(table) {
       if (this.formHydrating) return
       this.sourceFieldOptions = []
+      this.sourceFieldMetaMap = {}
       this.form.fieldMappings = []
       if (table && this.form.datasourceId) {
         this.loadJdbcSourceFields(this.form.datasourceId, table)
@@ -471,10 +563,23 @@ export default {
     },
     loadJdbcSourceFields(datasourceId, tableName) {
       return listColumns({ datasourceId, tableName }).then(res => {
-        this.sourceFieldOptions = (res.data || []).map(c => c.name).filter(Boolean)
+        const metaMap = {}
+        const names = []
+        ;(res.data || []).forEach(c => {
+          if (!c || !c.name) return
+          names.push(c.name)
+          metaMap[c.name] = {
+            type: this.normalizeColumnType(c.type),
+            comment: c.comment || ''
+          }
+          metaMap[String(c.name).toLowerCase()] = metaMap[c.name]
+        })
+        this.sourceFieldMetaMap = metaMap
+        this.sourceFieldOptions = names
         return this.sourceFieldOptions
       }).catch(() => {
         this.sourceFieldOptions = []
+        this.sourceFieldMetaMap = {}
         return []
       })
     },
@@ -494,19 +599,93 @@ export default {
     },
     loadApiSourceFields(datasourceId) {
       return listApiOutputFields(datasourceId).then(res => {
+        this.sourceFieldMetaMap = {}
         this.sourceFieldOptions = (res.data || []).map(f => f.fieldName).filter(Boolean)
         return this.sourceFieldOptions
       }).catch(() => {
         this.sourceFieldOptions = []
+        this.sourceFieldMetaMap = {}
         this.$modal.msgWarning('加载API出参失败，请确认接口可连通')
         return []
       })
+    },
+    normalizeColumnType(type) {
+      if (!type) return ''
+      return String(type).trim().toLowerCase().replace(/\s+/g, '')
+    },
+    getSourceMeta(sourceField) {
+      if (!sourceField) return { type: '', comment: '' }
+      const map = this.sourceFieldMetaMap || {}
+      return map[sourceField] || map[String(sourceField).toLowerCase()] || map[this.toLeafFieldName(sourceField)] || { type: '', comment: '' }
+    },
+    /** 构造一行映射，带上类型/注释默认值 */
+    buildMappingRow(sourceField, targetField) {
+      const meta = this.getSourceMeta(sourceField)
+      const row = {
+        sourceField: sourceField || '',
+        targetField: targetField != null ? targetField : this.toLeafFieldName(sourceField),
+        targetType: '',
+        targetComment: ''
+      }
+      if (this.isApiSource) {
+        // API：不填类型时后端默认字符串；表单预填便于看见默认值
+        row.targetType = 'varchar(255)'
+        row.targetComment = ''
+      } else {
+        row.targetType = meta.type || ''
+        row.targetComment = meta.comment || ''
+      }
+      return this.ensureMappingRowKey(row)
+    },
+    onSourceFieldPicked(row) {
+      if (!row) return
+      this.ensureMappingRowKey(row)
+      const meta = this.getSourceMeta(row.sourceField)
+      if (!row.targetField && row.sourceField) {
+        row.targetField = this.toLeafFieldName(row.sourceField)
+      }
+      if (!row.targetType) {
+        row.targetType = this.isApiSource ? 'varchar(255)' : (meta.type || '')
+      }
+      if (!row.targetComment) {
+        row.targetComment = meta.comment || ''
+      }
+    },
+    queryTypeSuggestions(queryString, cb) {
+      const q = (queryString || '').toLowerCase()
+      const list = (this.commonSqlTypes || [])
+        .filter(t => !q || t.indexOf(q) !== -1)
+        .map(t => ({ value: t }))
+      cb(list)
+    },
+    /** 粗粒度类型族，用于不兼容提示 */
+    typeFamily(type) {
+      const t = this.normalizeColumnType(type)
+      if (!t) return 'unknown'
+      if (t.indexOf('char') >= 0 || t.indexOf('text') >= 0 || t === 'json' || t.indexOf('blob') >= 0) return 'string'
+      if (t.indexOf('int') >= 0 || t === 'bit' || t.indexOf('bool') >= 0) return 'int'
+      if (t.indexOf('decimal') >= 0 || t.indexOf('numeric') >= 0 || t.indexOf('float') >= 0 || t.indexOf('double') >= 0) return 'number'
+      if (t.indexOf('date') >= 0 || t.indexOf('time') >= 0) return 'time'
+      return 'other'
+    },
+    onTargetTypeChange(row) {
+      if (!row || !row.targetType) return
+      const meta = this.getSourceMeta(row.sourceField)
+      const srcType = meta.type || (this.isApiSource ? 'varchar(255)' : '')
+      if (!srcType) return
+      const sf = this.typeFamily(srcType)
+      const tf = this.typeFamily(row.targetType)
+      // 宽松：字符串可接万物；数值族互转可接受；其余跨族提示
+      if (tf === 'string' || sf === tf) return
+      if ((sf === 'int' || sf === 'number') && (tf === 'int' || tf === 'number')) return
+      this.$modal.msgWarning('目标类型「' + row.targetType + '」可能与源类型「' + srcType + '」不兼容，同步任务可能会失败')
     },
     addMappingRow() {
       if (!this.form.fieldMappings) {
         this.$set(this.form, 'fieldMappings', [])
       }
-      this.form.fieldMappings.push({ sourceField: '', targetField: '' })
+      this.form.fieldMappings.push(this.buildMappingRow('', ''))
+      this.$nextTick(() => this.initMappingSortable())
     },
     autoMapFields() {
       if (!this.sourceFieldOptions.length) {
@@ -520,13 +699,14 @@ export default {
         this.targetFieldOptions.forEach(tf => {
           if (sourceSet.has(tf.toLowerCase())) {
             const sf = this.sourceFieldOptions.find(s => s.toLowerCase() === tf.toLowerCase())
-            mapped.push({ sourceField: sf, targetField: tf })
+            mapped.push(this.buildMappingRow(sf, tf))
           }
         })
         this.form.fieldMappings = mapped
         if (!mapped.length) {
           this.$modal.msgWarning('未找到同名字段；可改用「同源字段名」按源字段生成目标列名')
         }
+        this.$nextTick(() => this.initMappingSortable())
         return
       }
       this.mapBySourceFieldNames()
@@ -537,10 +717,8 @@ export default {
         this.$modal.msgWarning('请先加载源字段')
         return
       }
-      this.form.fieldMappings = this.sourceFieldOptions.map(sf => ({
-        sourceField: sf,
-        targetField: this.toLeafFieldName(sf)
-      }))
+      this.form.fieldMappings = this.sourceFieldOptions.map(sf => this.buildMappingRow(sf, this.toLeafFieldName(sf)))
+      this.$nextTick(() => this.initMappingSortable())
     },
     /** API 嵌套字段取最后一段作为默认目标列名 */
     toLeafFieldName(field) {
@@ -615,6 +793,7 @@ export default {
       this.sourceTableOptions = []
       this.targetTableOptions = []
       this.sourceFieldOptions = []
+      this.sourceFieldMetaMap = {}
       this.targetFieldOptions = []
       this.effectiveRange = []
       this.resetForm('form')
@@ -666,7 +845,21 @@ export default {
             return targetTable ? this.loadTargetFields(targetDsId, targetTable) : []
           })
         Promise.all([sourceReady, targetReady]).then(() => {
-          this.$set(this.form, 'fieldMappings', mappings)
+          // 兼容旧数据：补齐类型/注释字段
+          const filled = (mappings || []).map(m => {
+            const row = Object.assign({ targetType: '', targetComment: '' }, m)
+            if (!row.targetType) {
+              const meta = this.getSourceMeta(row.sourceField)
+              row.targetType = this.isApiSource ? 'varchar(255)' : (meta.type || '')
+            }
+            if (!row.targetComment) {
+              const meta = this.getSourceMeta(row.sourceField)
+              row.targetComment = meta.comment || ''
+            }
+            return this.ensureMappingRowKey(row)
+          })
+          this.$set(this.form, 'fieldMappings', filled)
+          this.$nextTick(() => this.initMappingSortable())
         }).finally(() => {
           this.$nextTick(() => { this.formHydrating = false })
         })
@@ -687,7 +880,15 @@ export default {
           this.$modal.msgWarning('请选择源表')
           return
         }
-        const mappings = (this.form.fieldMappings || []).filter(i => i && i.sourceField && i.targetField)
+        const mappings = (this.form.fieldMappings || [])
+          .filter(i => i && i.sourceField && i.targetField)
+          .map(i => ({
+            sourceField: i.sourceField,
+            targetField: i.targetField,
+            targetType: i.targetType || undefined,
+            targetComment: i.targetComment || undefined
+            // _rowKey 仅前端拖拽用，不提交
+          }))
         if (!mappings.length) {
           this.$modal.msgWarning('请至少配置一条字段映射')
           return
@@ -738,3 +939,22 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.mapping-drag-handle {
+  cursor: move;
+  color: #909399;
+  font-size: 16px;
+}
+.mapping-drag-handle:hover {
+  color: #409EFF;
+}
+</style>
+
+<style>
+/* Sortable ghost 作用在表格行上，需非 scoped */
+.mapping-row-ghost {
+  opacity: 0.6;
+  background: #f5f7fa !important;
+}
+</style>
