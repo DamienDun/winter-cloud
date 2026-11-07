@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS `ds_jdbc_datasource` (
 -- 菜单：数据源管理（顶级目录，与前端常量路由「文件管理」同级）
 -- ----------------------------
 INSERT INTO sys_menu VALUES('2100', '数据源管理', '0', '0', 'datasource', null, '', '', 1, 0, 'M', '0', '0', '', 'redis', 'admin', sysdate(), '', null, '数据源管理目录');
-INSERT INTO sys_menu VALUES('2101', '数据源配置', '2100', '1', 'info', 'datasource/info/index', '', '', 1, 0, 'C', '0', '0', 'datasource:info:list', 'redis', 'admin', sysdate(), '', null, '数据源配置菜单');
+INSERT INTO sys_menu VALUES('2101', 'JDBC数据源', '2100', '1', 'info', 'datasource/info/index', '', '', 1, 0, 'C', '0', '0', 'datasource:info:list', 'redis', 'admin', sysdate(), '', null, 'JDBC数据源菜单');
 INSERT INTO sys_menu VALUES('2102', '数据源查询', '2101', '1', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:info:query', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES('2103', '数据源新增', '2101', '2', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:info:add', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES('2104', '数据源修改', '2101', '3', '', '', '', '', 1, 0, 'F', '0', '0', 'datasource:info:edit', '#', 'admin', sysdate(), '', null, '');
