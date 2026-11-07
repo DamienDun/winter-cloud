@@ -2,6 +2,8 @@ package com.winter.cloud.datasource.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.winter.cloud.common.mybatis.domain.entity.DefaultBaseEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
@@ -22,6 +24,8 @@ public class DsJobLog extends DefaultBaseEntity {
 
     private static final long serialVersionUID = 1L;
 
+    /** 雪花作业ID，字符串输出避免前端精度丢失导致按错ID查不到日志 */
+    @JsonSerialize(using = ToStringSerializer.class)
     @Schema(description = "作业id")
     private Long jobId;
 

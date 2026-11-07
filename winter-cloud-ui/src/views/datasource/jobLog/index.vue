@@ -117,8 +117,9 @@ export default {
   methods: {
     applyRouteQuery() {
       const q = this.$route.query || {}
+      // 统一转字符串，避免雪花 ID 被 Number 化丢精度后查不到日志
       if (q.jobId != null && q.jobId !== '') {
-        this.queryParams.jobId = q.jobId
+        this.queryParams.jobId = String(q.jobId)
       }
       if (q.jobName) {
         this.queryParams.jobName = q.jobName
@@ -129,6 +130,8 @@ export default {
       const params = Object.assign({}, this.queryParams)
       if (params.jobId === '' || params.jobId == null) {
         delete params.jobId
+      } else {
+        params.jobId = String(params.jobId)
       }
       listJobLog(params).then(res => {
         this.dataList = res.rows || []

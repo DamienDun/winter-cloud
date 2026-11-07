@@ -130,6 +130,7 @@ public class XxlJobBindHelper {
         Map<String, Object> create = new HashMap<>(8);
         create.put("appname", DsJobConstants.EXECUTOR_APP_NAME);
         create.put("title", DsJobConstants.EXECUTOR_TITLE);
+        // 0=自动注册；勿改成手动地址，端口写错会导致触发失败、作业日志无数据
         create.put("addressType", 0);
         create.put("addressList", "");
         assertOk(remoteXxlJobGroupService.addInner(create, SecurityConstants.INNER), "create job group");

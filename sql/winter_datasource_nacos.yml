@@ -66,6 +66,8 @@ springdoc:
 
 # XXL-JOB 执行器（AppName 固定 datasource-data-extra，与业务绑定一致）
 # admin.addresses 指向 winter-xxljob 对外可访问地址（含网关或直连）
+# 注意：执行器组请用「自动注册」；若改成手动地址，端口必须与下方 port 一致（当前 9998），
+# 否则调度 Connection refused，作业能点执行但 ds_job_log 无记录。
 xxl:
   job:
     admin:

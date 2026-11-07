@@ -730,7 +730,10 @@ export default {
       }).catch(() => {})
     },
     goLog(row) {
-      this.$router.push({ path: '/datasource/jobLog', query: { jobId: row.id, jobName: row.jobName } })
+      this.$router.push({
+        path: '/datasource/jobLog',
+        query: { jobId: row.id != null ? String(row.id) : undefined, jobName: row.jobName }
+      })
     }
   }
 }
