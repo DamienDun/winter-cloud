@@ -15,10 +15,12 @@ public class DsJobExecuteParam {
     /** 业务作业主键 */
     private Long jobId;
 
-    /** 0手动 1定时 */
+    /** 触发方式：0 手动，1 定时 */
     private Integer triggerType;
 
+    /** 触发人用户 ID（手动触发时有值） */
     private Long triggerUserId;
 
+    /** 触发人用户名 */
     private String triggerUsername;
 }

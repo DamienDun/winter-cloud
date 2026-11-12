@@ -7,6 +7,12 @@
       <el-form-item label="分组" prop="datasourceGroup">
         <el-input v-model="queryParams.datasourceGroup" placeholder="分组" clearable @keyup.enter.native="handleQuery" />
       </el-form-item>
+      <el-form-item label="数据源类型" prop="datasourceType">
+        <el-select v-model="queryParams.datasourceType" placeholder="类型" clearable>
+          <el-option label="HTTP" value="HTTP" />
+          <el-option label="WebService" value="WEBSERVICE" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="请求方式" prop="reqType">
         <el-select v-model="queryParams.reqType" placeholder="请求方式" clearable>
           <el-option label="POST" :value="0" />
@@ -42,6 +48,13 @@
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="名称" align="center" prop="datasourceName" min-width="120" :show-overflow-tooltip="true" />
       <el-table-column label="分组" align="center" prop="datasourceGroup" width="100" :show-overflow-tooltip="true" />
+      <el-table-column label="类型" align="center" prop="datasourceType" width="100">
+        <template slot-scope="scope">
+          <el-tag :type="scope.row.datasourceType === 'WEBSERVICE' ? 'warning' : ''" size="mini">
+            {{ scope.row.datasourceType === 'WEBSERVICE' ? 'WebService' : 'HTTP' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="URL" align="center" prop="apiUrl" min-width="220" :show-overflow-tooltip="true" />
       <el-table-column label="请求" align="center" prop="reqType" width="80">
         <template slot-scope="scope">{{ scope.row.reqType === 0 ? 'POST' : 'GET' }}</template>
@@ -104,13 +117,19 @@
         </el-row>
 
         <el-divider content-position="left">接口配置</el-divider>
+        <el-form-item label="数据源类型" prop="datasourceType">
+          <el-radio-group v-model="form.datasourceType" @change="onDatasourceTypeChange">
+            <el-radio label="HTTP">HTTP</el-radio>
+            <el-radio label="WEBSERVICE">WebService</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="接口地址" prop="apiUrl">
-          <el-input v-model="form.apiUrl" placeholder="http://host/api/path" />
+          <el-input v-model="form.apiUrl" :placeholder="isWebService ? 'http://host/service?wsdl 或 SOAP 端点' : 'http://host/api/path'" />
         </el-form-item>
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="请求方式" prop="reqType">
-              <el-radio-group v-model="form.reqType">
+              <el-radio-group v-model="form.reqType" :disabled="isWebService">
                 <el-radio :label="1">GET</el-radio>
                 <el-radio :label="0">POST</el-radio>
               </el-radio-group>
@@ -118,10 +137,16 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="数据项KEY" prop="dataItemKey">
-              <el-input v-model="form.dataItemKey" placeholder="data / data.list / rows" />
+              <el-input
+                v-model="form.dataItemKey"
+                :placeholder="isWebService ? 'Envelope.Body.xxx.return' : 'data / data.list / rows'"
+              />
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item v-if="isWebService" label="SOAPAction" prop="soapAction">
+          <el-input v-model="form.reqParams.soapAction" placeholder="可选，如 http://tempuri.org/GetList" />
+        </el-form-item>
         <el-form-item label="分页接口" prop="pageApi">
           <el-radio-group v-model="form.pageApi">
             <el-radio :label="0">否</el-radio>
@@ -129,7 +154,12 @@
           </el-radio-group>
         </el-form-item>
         <div class="api-ds-hint">
-          数据项 KEY 指向响应中的业务列表节点。勾选「分页接口」后：测试连接会把 pageSize 临时改为 2；作业同步按页拉取并逐页写入，避免内存堆积。
+          <template v-if="isWebService">
+            WebService 固定 POST，Body 填 SOAP XML；数据项 KEY 用 XML 点路径（忽略命名空间），如 Envelope.Body.getListResponse.return。分页时会改 XML 中 pageNum/pageSize 标签文本。
+          </template>
+          <template v-else>
+            数据项 KEY 指向响应中的业务列表节点。勾选「分页接口」后：测试连接会把 pageSize 临时改为 2；作业同步按页拉取并逐页写入，避免内存堆积。
+          </template>
         </div>
 
         <el-divider content-position="left">依赖鉴权</el-divider>
@@ -250,13 +280,21 @@
             </div>
           </div>
         </el-form-item>
-        <el-form-item label-width="0" class="api-ds-block-item" v-if="form.reqType === 0">
+        <el-form-item label-width="0" class="api-ds-block-item" v-if="form.reqType === 0 || isWebService">
           <div class="api-ds-panel">
             <div class="api-ds-panel-toolbar">
-              <span class="api-ds-panel-title">Body（JSON）</span>
+              <span class="api-ds-panel-title">{{ isWebService ? 'Body（SOAP XML）' : 'Body（JSON）' }}</span>
             </div>
             <div class="api-ds-panel-body">
-              <el-input v-model="form.reqParams.body" type="textarea" :rows="5" placeholder='{"pageNum":1,"pageSize":100}' class="api-ds-body-input" />
+              <el-input
+                v-model="form.reqParams.body"
+                type="textarea"
+                :rows="isWebService ? 10 : 5"
+                :placeholder="isWebService
+                  ? '<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">...</soapenv:Envelope>'
+                  : '{\"pageNum\":1,\"pageSize\":100}'"
+                class="api-ds-body-input"
+              />
             </div>
           </div>
         </el-form-item>
@@ -282,10 +320,14 @@
         <el-descriptions-item label="状态">{{ viewForm.status === 1 ? '启用' : '停用' }}</el-descriptions-item>
         <el-descriptions-item label="名称">{{ viewForm.datasourceName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="分组">{{ viewForm.datasourceGroup || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="URL" :span="2">{{ viewForm.apiUrl || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="数据源类型">{{ viewForm.datasourceType === 'WEBSERVICE' ? 'WebService' : 'HTTP' }}</el-descriptions-item>
         <el-descriptions-item label="请求方式">{{ viewForm.reqType === 0 ? 'POST' : 'GET' }}</el-descriptions-item>
+        <el-descriptions-item label="URL" :span="2">{{ viewForm.apiUrl || '-' }}</el-descriptions-item>
         <el-descriptions-item label="数据项KEY">{{ viewForm.dataItemKey || '-' }}</el-descriptions-item>
         <el-descriptions-item label="分页接口">{{ Number(viewForm.pageApi) === 1 ? '是' : '否' }}</el-descriptions-item>
+        <el-descriptions-item v-if="viewForm.datasourceType === 'WEBSERVICE'" label="SOAPAction" :span="2">
+          {{ (viewForm.reqParams && viewForm.reqParams.soapAction) || (viewReqParams && viewReqParams.soapAction) || '-' }}
+        </el-descriptions-item>
         <el-descriptions-item label="依赖数据源">{{ viewForm.belongToRelyDatasource === 0 ? '是' : '否' }}</el-descriptions-item>
         <el-descriptions-item label="依赖API">
           <template v-if="viewForm.belongToRelyDatasource === 0">
@@ -375,20 +417,23 @@ export default {
         pageSize: 10,
         datasourceName: undefined,
         datasourceGroup: undefined,
+        datasourceType: undefined,
         reqType: undefined,
         status: undefined
       },
       // 对话框未打开时模板也会渲染 form.reqParams.*，必须给默认结构，否则整页白屏
       form: {
         datasourceGroup: 'Default',
+        datasourceType: 'HTTP',
         reqType: 1,
         status: 1,
         pageApi: 0,
         belongToRelyDatasource: 1,
-        reqParams: { params: [], headers: [], body: '', page: [], preRequestScript: '' }
+        reqParams: { params: [], headers: [], body: '', page: [], preRequestScript: '', soapAction: '' }
       },
       rules: {
         datasourceName: [{ required: true, message: '名称不能为空', trigger: 'blur' }],
+        datasourceType: [{ required: true, message: '请选择数据源类型', trigger: 'change' }],
         apiUrl: [{ required: true, message: 'URL不能为空', trigger: 'blur' }],
         reqType: [{ required: true, message: '请选择请求方式', trigger: 'change' }]
       }
@@ -398,8 +443,11 @@ export default {
     this.getList()
   },
   computed: {
+    isWebService() {
+      return this.form && this.form.datasourceType === 'WEBSERVICE'
+    },
     viewReqParams() {
-      const empty = { params: [], headers: [], body: '', page: [], preRequestScript: '' }
+      const empty = { params: [], headers: [], body: '', page: [], preRequestScript: '', soapAction: '' }
       if (!this.viewForm) {
         return empty
       }
@@ -409,7 +457,8 @@ export default {
           headers: this.viewForm.reqParams.headers || [],
           body: this.viewForm.reqParams.body || '',
           page: this.viewForm.reqParams.page || [],
-          preRequestScript: this.viewForm.reqParams.preRequestScript || ''
+          preRequestScript: this.viewForm.reqParams.preRequestScript || '',
+          soapAction: this.viewForm.reqParams.soapAction || ''
         }
       }
       // 兼容仅返回 reqParamsJson 字符串的情况
@@ -422,7 +471,8 @@ export default {
           headers: parsed.headers || [],
           body: parsed.body || '',
           page: parsed.page || [],
-          preRequestScript: parsed.preRequestScript || ''
+          preRequestScript: parsed.preRequestScript || '',
+          soapAction: parsed.soapAction || ''
         }
       } catch (e) {
         return empty
@@ -431,7 +481,18 @@ export default {
   },
   methods: {
     emptyReqParams() {
-      return { params: [], headers: [], body: '', page: [], preRequestScript: '' }
+      return { params: [], headers: [], body: '', page: [], preRequestScript: '', soapAction: '' }
+    },
+    onDatasourceTypeChange(val) {
+      if (val === 'WEBSERVICE') {
+        this.form.reqType = 0
+        if (!this.form.reqParams) {
+          this.$set(this.form, 'reqParams', this.emptyReqParams())
+        }
+        if (this.form.reqParams.soapAction == null) {
+          this.$set(this.form.reqParams, 'soapAction', '')
+        }
+      }
     },
     /** 详情/测试结果：尽量格式化 JSON，失败则原样返回 */
     formatJsonText(val) {
@@ -618,6 +679,7 @@ export default {
         id: undefined,
         datasourceName: undefined,
         datasourceGroup: 'Default',
+        datasourceType: 'HTTP',
         apiUrl: undefined,
         reqType: 1,
         dataItemKey: undefined,
@@ -673,7 +735,11 @@ export default {
         // 接口可能返回字符串 "0"/"1"，统一成数字，否则 v-if === 0 不成立、依赖区不渲染
         data.belongToRelyDatasource = data.belongToRelyDatasource == null ? 1 : Number(data.belongToRelyDatasource)
         data.pageApi = data.pageApi == null ? 0 : Number(data.pageApi)
-        data.reqType = data.reqType == null ? 1 : Number(data.reqType)
+        data.datasourceType = data.datasourceType ? String(data.datasourceType).toUpperCase() : 'HTTP'
+        if (data.datasourceType === 'SOAP' || data.datasourceType === 'WS' || data.datasourceType === 'WEB_SERVICE') {
+          data.datasourceType = 'WEBSERVICE'
+        }
+        data.reqType = data.datasourceType === 'WEBSERVICE' ? 0 : (data.reqType == null ? 1 : Number(data.reqType))
         data.status = data.status == null ? 1 : Number(data.status)
         // 雪花ID统一转字符串，与依赖下拉 option value 对齐
         if (data.id != null) data.id = String(data.id)
@@ -721,7 +787,8 @@ export default {
         headers: obj.headers || [],
         body: obj.body || '',
         page: obj.page || [],
-        preRequestScript: obj.preRequestScript || ''
+        preRequestScript: obj.preRequestScript || '',
+        soapAction: obj.soapAction || ''
       }
     },
     cancel() {

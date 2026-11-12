@@ -11,17 +11,24 @@ import java.util.function.Consumer;
  */
 public class DsJobSyncTrace {
 
+    /** 日志正文最大字符数，超出截断 */
     private static final int MAX_CHARS = 60000;
-    /** 进度刷库最小间隔，避免每一步都打库 */
+    /** 进度刷库最小间隔（毫秒），避免每一步都打库 */
     private static final long FLUSH_INTERVAL_MS = 1000L;
 
+    /** 追踪开始时间戳（毫秒） */
     private final long startMs = System.currentTimeMillis();
+    /** 分步日志缓冲 */
     private final StringBuilder sb = new StringBuilder(2048);
+    /** 当前步骤序号 */
     private int stepNo;
-    /** 是否同时写入 XXL-JOB（默认开启；非调度线程可关闭） */
+    /** 是否同时镜像写入 XXL-JOB 执行日志（默认开启；非调度线程可关闭） */
     private final boolean mirrorToXxlJob;
+    /** 终止检测回调：返回 true 表示任务已被请求终止 */
     private BooleanSupplier cancelChecker;
+    /** 进度落库回调：接收当前完整日志文本 */
     private Consumer<String> progressSink;
+    /** 上次刷进度时间戳（毫秒） */
     private long lastFlushMs;
 
     public DsJobSyncTrace() {

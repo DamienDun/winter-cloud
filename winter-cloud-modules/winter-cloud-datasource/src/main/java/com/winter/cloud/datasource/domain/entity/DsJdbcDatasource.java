@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * JDBC 数据源配置（表前缀 ds_）
+ * JDBC 数据源配置
  */
 @Getter
 @Setter
@@ -19,32 +19,39 @@ public class DsJdbcDatasource extends DefaultBaseEntity {
 
     private static final long serialVersionUID = 1L;
 
+    /** 数据源名称 */
     @Schema(description = "数据源名称")
     private String datasourceName;
 
+    /** 数据源分组，默认 Default */
     @Schema(description = "数据源分组")
     private String datasourceGroup;
 
-    /** 类型：mysql/oracle/postgresql/sqlserver/hive/clickhouse/presto */
-    @Schema(description = "数据源类型")
+    /** 数据源类型：mysql/oracle/postgresql/sqlserver/hive/clickhouse/presto 等 */
+    @Schema(description = "数据源类型：mysql/oracle/postgresql/sqlserver/hive/clickhouse/presto")
     private String datasourceType;
 
-    @Schema(description = "JDBC 用户名")
+    /** JDBC 用户名 */
+    @Schema(description = "JDBC用户名")
     private String jdbcUsername;
 
-    @Schema(description = "JDBC 密码（入库 AES 加密）")
+    /** JDBC 密码（入库前 AES 加密） */
+    @Schema(description = "JDBC密码（入库AES加密）")
     private String jdbcPassword;
 
-    @Schema(description = "JDBC URL")
+    /** JDBC 连接 URL */
+    @Schema(description = "JDBC连接URL")
     private String jdbcUrl;
 
-    @Schema(description = "JDBC 驱动类")
+    /** JDBC 驱动类全限定名 */
+    @Schema(description = "JDBC驱动类")
     private String jdbcDriverClass;
 
+    /** 数据库名（可选，部分库型可从 URL 解析） */
     @Schema(description = "数据库名（可选）")
     private String databaseName;
 
-    /** 0停用 1启用 */
-    @Schema(description = "状态：0停用 1启用")
+    /** 状态：0 停用，1 启用 */
+    @Schema(description = "状态：0停用，1启用")
     private Integer status;
 }

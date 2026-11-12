@@ -200,9 +200,10 @@ CREATE TABLE IF NOT EXISTS `ds_api_datasource` (
   `id` bigint(20) NOT NULL COMMENT '主键',
   `datasource_name` varchar(100) NOT NULL COMMENT '数据源名称',
   `datasource_group` varchar(200) DEFAULT 'Default' COMMENT '数据源分组',
+  `datasource_type` varchar(32) NOT NULL DEFAULT 'HTTP' COMMENT '数据源类型：HTTP / WEBSERVICE',
   `api_url` varchar(512) NOT NULL COMMENT '接口地址',
   `req_type` tinyint(4) NOT NULL DEFAULT 1 COMMENT '请求方式：0 POST，1 GET',
-  `data_item_key` varchar(512) DEFAULT NULL COMMENT '数据项KEY（响应取值路径）',
+  `data_item_key` varchar(512) DEFAULT NULL COMMENT '数据项KEY（响应取值路径；WebService 为 XML 点路径）',
   `page_api` tinyint(4) NOT NULL DEFAULT 0 COMMENT '是否分页接口：0否，1是',
   `req_params_json` mediumtext COMMENT '请求参数JSON',
   `rely_datasource_id` bigint(20) DEFAULT NULL COMMENT '依赖API数据源ID',
@@ -220,6 +221,7 @@ CREATE TABLE IF NOT EXISTS `ds_api_datasource` (
   PRIMARY KEY (`id`),
   KEY `idx_ds_api_name` (`datasource_name`),
   KEY `idx_ds_api_group` (`datasource_group`),
+  KEY `idx_ds_api_datasource_type` (`datasource_type`),
   KEY `idx_ds_api_rely` (`rely_datasource_id`),
   KEY `idx_ds_api_deleted` (`is_deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='API数据源配置';
@@ -267,3 +269,7 @@ ALTER TABLE `ds_job_log` ADD COLUMN `xxl_log_id` bigint(20) DEFAULT NULL COMMENT
 
 -- 已有库升级：API 数据源是否分页接口
 ALTER TABLE `ds_api_datasource` ADD COLUMN `page_api` tinyint(4) NOT NULL DEFAULT 0 COMMENT '是否分页接口：0否，1是' AFTER `data_item_key`;
+
+-- 已有库升级：API 数据源类型（旧数据默认 HTTP）
+ALTER TABLE `ds_api_datasource` ADD COLUMN `datasource_type` varchar(32) NOT NULL DEFAULT 'HTTP' COMMENT '数据源类型：HTTP / WEBSERVICE' AFTER `datasource_group`;
+UPDATE

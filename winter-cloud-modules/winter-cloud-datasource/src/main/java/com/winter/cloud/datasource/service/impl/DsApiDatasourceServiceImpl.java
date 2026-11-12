@@ -13,6 +13,7 @@ import com.winter.cloud.datasource.domain.dto.DsApiTestResult;
 import com.winter.cloud.datasource.domain.entity.DsApiDatasource;
 import com.winter.cloud.datasource.mapper.DsApiDatasourceMapper;
 import com.winter.cloud.datasource.service.IDsApiDatasourceService;
+import com.winter.cloud.datasource.support.DsApiXmlSupport;
 import com.winter.cloud.datasource.support.DsJobCancelRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,8 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
     private static final int REQ_POST = 0;
     private static final int REQ_GET = 1;
     private static final int AVAILABLE = 0;
+    private static final String API_TYPE_HTTP = "HTTP";
+    private static final String API_TYPE_WEBSERVICE = "WEBSERVICE";
     private static final Pattern RELY_PLACEHOLDER = Pattern.compile("\\{\\{rely\\.([0-9a-zA-Z_.]+)\\}\\}");
 
     @Autowired
@@ -60,6 +63,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         if (query != null) {
             qw.like(StringUtils.isNotEmpty(query.getDatasourceName()), DsApiDatasource::getDatasourceName, query.getDatasourceName());
             qw.eq(StringUtils.isNotEmpty(query.getDatasourceGroup()), DsApiDatasource::getDatasourceGroup, query.getDatasourceGroup());
+            qw.eq(StringUtils.isNotEmpty(query.getDatasourceType()), DsApiDatasource::getDatasourceType, query.getDatasourceType());
             qw.eq(query.getReqType() != null, DsApiDatasource::getReqType, query.getReqType());
             qw.eq(query.getStatus() != null, DsApiDatasource::getStatus, query.getStatus());
             qw.eq(query.getBelongToRelyDatasource() != null, DsApiDatasource::getBelongToRelyDatasource, query.getBelongToRelyDatasource());
@@ -110,15 +114,15 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         if (test.getTestStatus() == null || test.getTestStatus() != 0) {
             throw new IllegalStateException("api call failed: " + test.getTestResult());
         }
-        Object root = parseRootJson(test.getTestResult());
-        // 始终从根按 JSON 路径展平（数组只取第一条），得到 data.id 这种唯一路径；值保留原始类型用于推断
+        Object root = parseRoot(ds, test.getTestResult());
+        // 始终从根按路径展平（数组只取第一条），得到 data.id / Envelope.Body.xxx 这种唯一路径
         Map<String, Object> flat = new LinkedHashMap<>();
         flattenJsonKeys("", root, flat, 0);
 
         String scopePrefix = normalizeDataItemKeyPrefix(ds.getDataItemKey());
         if (StringUtils.isEmpty(scopePrefix)) {
-            // 未配 dataItemKey 时，自动落到业务列表路径（如 data / data.list）
-            Object parsed = parseByDataItemKey(null, test.getTestResult());
+            // 未配 dataItemKey 时，自动落到业务列表路径（如 data / data.list / return）
+            Object parsed = navigateByDataItemKey(ds, null, root, test.getTestResult());
             RowExtract extract = extractRowItems(root, parsed, null);
             if (extract != null && StringUtils.isNotEmpty(extract.prefix)) {
                 scopePrefix = extract.prefix;
@@ -412,9 +416,9 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             throw new IllegalStateException("api call failed: " + test.getTestResult());
         }
         String raw = test.getTestResult();
-        Object root = parseRootJson(raw);
+        Object root = parseRoot(ds, raw);
         String dataItemKey = ds.getDataItemKey();
-        Object parsed = parseByDataItemKey(dataItemKey, raw);
+        Object parsed = navigateByDataItemKey(ds, dataItemKey, root, raw);
         RowExtract extract = extractRowItems(root, parsed, dataItemKey);
         List<Map<String, Object>> rows = new ArrayList<>();
         if (extract == null || extract.items == null || extract.items.isEmpty()) {
@@ -488,6 +492,16 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             return null;
         }
         String trimmed = body.trim();
+        if (trimmed.startsWith("<")) {
+            // SOAP/XML Body：探测常见页码标签
+            String[] candidates = {"pageNum", "pageNo", "page", "current", "currentPage", "PageNum", "PageNo"};
+            for (String key : candidates) {
+                if (DsApiXmlSupport.containsTag(trimmed, key)) {
+                    return key;
+                }
+            }
+            return null;
+        }
         if (!trimmed.startsWith("{")) {
             return null;
         }
@@ -528,7 +542,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         String val = String.valueOf(pageNum);
         setItemValueByName(reqParams.getPage(), pageNumKey, val);
         setItemValueByName(reqParams.getParams(), pageNumKey, val);
-        reqParams.setBody(setJsonNumberOrStringField(reqParams.getBody(), pageNumKey, pageNum));
+        reqParams.setBody(setBodyFieldValue(reqParams.getBody(), pageNumKey, pageNum));
     }
 
     /** 测试连接：把 pageSize/limit/size 等改为较小值（若参数或 Body 中存在该字段） */
@@ -538,7 +552,29 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         }
         applyPageSizeOnItems(reqParams.getPage(), pageSize);
         applyPageSizeOnItems(reqParams.getParams(), pageSize);
-        reqParams.setBody(setJsonPageSizeFields(reqParams.getBody(), pageSize));
+        String body = reqParams.getBody();
+        if (StringUtils.isNotEmpty(body) && body.trim().startsWith("<")) {
+            String[] sizeTags = {"pageSize", "PageSize", "limit", "Limit", "size", "Size"};
+            for (String tag : sizeTags) {
+                if (DsApiXmlSupport.containsTag(body, tag)) {
+                    body = DsApiXmlSupport.replaceTagText(body, tag, String.valueOf(pageSize));
+                }
+            }
+            reqParams.setBody(body);
+        } else {
+            reqParams.setBody(setJsonPageSizeFields(body, pageSize));
+        }
+    }
+
+    /** JSON 改字段；XML 改同名标签文本 */
+    private String setBodyFieldValue(String body, String field, int pageNum) {
+        if (StringUtils.isEmpty(body)) {
+            return body;
+        }
+        if (body.trim().startsWith("<")) {
+            return DsApiXmlSupport.replaceTagText(body, field, String.valueOf(pageNum));
+        }
+        return setJsonNumberOrStringField(body, field, pageNum);
     }
 
     private void applyPageSizeOnItems(List<DsApiReqParamsItem> items, int pageSize) {
@@ -663,6 +699,35 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         return JSON.parseObject(trimmed);
     }
 
+    private boolean isWebService(DsApiDatasource ds) {
+        return API_TYPE_WEBSERVICE.equals(resolveDatasourceType(ds));
+    }
+
+    private String resolveDatasourceType(DsApiDatasource ds) {
+        if (ds == null) {
+            return API_TYPE_HTTP;
+        }
+        return DsApiXmlSupport.normalizeDatasourceType(ds.getDatasourceType());
+    }
+
+    /** 按数据源类型解析响应根节点：WebService→XML 树，HTTP→JSON */
+    private Object parseRoot(DsApiDatasource ds, String raw) {
+        if (StringUtils.isEmpty(raw)) {
+            return null;
+        }
+        if (isWebService(ds)) {
+            return DsApiXmlSupport.parseToJson(raw);
+        }
+        return parseRootJson(raw);
+    }
+
+    private Object navigateByDataItemKey(DsApiDatasource ds, String dataItemKey, Object root, String raw) {
+        if (isWebService(ds)) {
+            return DsApiXmlSupport.navigate(root, normalizeDataItemKeyPrefix(dataItemKey));
+        }
+        return parseByDataItemKey(dataItemKey, raw);
+    }
+
     private static final class RowExtract {
         private final String prefix;
         private final List<Object> items;
@@ -696,10 +761,20 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
                 return found;
             }
         }
-        if (parsed instanceof JSONObject) {
+        if (parsed instanceof JSONObject || parsed instanceof Map) {
             List<Object> one = new ArrayList<>(1);
             one.add(parsed);
             return new RowExtract(configuredPrefix, one);
+        }
+        if (parsed instanceof List) {
+            List<?> list = (List<?>) parsed;
+            List<Object> items = new ArrayList<>();
+            for (Object o : list) {
+                if (o instanceof JSONObject || o instanceof Map) {
+                    items.add(o);
+                }
+            }
+            return new RowExtract(configuredPrefix, items);
         }
         return new RowExtract(configuredPrefix, new ArrayList<>());
     }
@@ -749,11 +824,19 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             }
             return null;
         }
+        if (node instanceof List) {
+            List<?> list = (List<?>) node;
+            if (!list.isEmpty() && (list.get(0) instanceof JSONObject || list.get(0) instanceof Map)) {
+                return new RowExtract(prefix, new ArrayList<>(list));
+            }
+            return null;
+        }
         if (!(node instanceof JSONObject)) {
             return null;
         }
         JSONObject obj = (JSONObject) node;
-        String[] preferred = new String[]{"data", "list", "rows", "records", "result", "items", "content"};
+        // WebService 常见 return/item；HTTP 常见 data/list/rows
+        String[] preferred = new String[]{"data", "list", "rows", "records", "result", "items", "content", "return", "item", "entry"};
         for (String candidate : preferred) {
             if (!obj.containsKey(candidate)) {
                 continue;
@@ -841,7 +924,12 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         if (entity.getPageApi() == null) {
             entity.setPageApi(0);
         }
-        if (entity.getReqType() == null) {
+        if (StringUtils.isEmpty(entity.getDatasourceType())) {
+            entity.setDatasourceType(API_TYPE_HTTP);
+        }
+        if (isWebService(entity)) {
+            entity.setReqType(REQ_POST);
+        } else if (entity.getReqType() == null) {
             entity.setReqType(REQ_GET);
         }
         // no dependency selected -> clear rely id
@@ -920,7 +1008,8 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         if (relyResult.getTestStatus() == null || relyResult.getTestStatus() != 0) {
             throw new IllegalStateException("rely api call failed: " + relyResult.getTestResult());
         }
-        Object parsed = parseByDataItemKey(rely.getDataItemKey(), relyResult.getTestResult());
+        Object root = parseRoot(rely, relyResult.getTestResult());
+        Object parsed = navigateByDataItemKey(rely, rely.getDataItemKey(), root, relyResult.getTestResult());
         flattenFields("", parsed, map, 0);
         return map;
     }
@@ -950,21 +1039,41 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
                 applyPageNumber(reqParams, pageKey, pageNumOverride);
             }
             String url = buildUrl(entity.getApiUrl(), reqParams);
-            Integer reqType = entity.getReqType() == null ? REQ_GET : entity.getReqType();
+            boolean webService = isWebService(entity);
+            // WebService 固定 POST；HTTP 按配置
+            Integer reqType = webService ? REQ_POST : (entity.getReqType() == null ? REQ_GET : entity.getReqType());
 
             HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(30000);
             conn.setInstanceFollowRedirects(true);
             applyHeaders(conn, reqParams.getHeaders());
-            conn.setRequestProperty("Accept", "*/*");
+            if (webService) {
+                conn.setRequestProperty("Accept", "text/xml, application/soap+xml, application/xml, */*");
+                // SOAPAction：优先用配置字段，其次用户自定义 Header
+                if (StringUtils.isNotEmpty(reqParams.getSoapAction())
+                        && StringUtils.isEmpty(conn.getRequestProperty("SOAPAction"))) {
+                    String action = reqParams.getSoapAction().trim();
+                    // SOAP 1.1 规范值通常带引号
+                    if (!action.startsWith("\"")) {
+                        action = "\"" + action + "\"";
+                    }
+                    conn.setRequestProperty("SOAPAction", action);
+                }
+            } else {
+                conn.setRequestProperty("Accept", "*/*");
+            }
 
             if (REQ_POST == reqType) {
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
                 String body = reqParams.getBody() == null ? "" : reqParams.getBody();
                 if (StringUtils.isEmpty(conn.getRequestProperty("Content-Type"))) {
-                    conn.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+                    if (webService) {
+                        conn.setRequestProperty("Content-Type", "text/xml;charset=UTF-8");
+                    } else {
+                        conn.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+                    }
                 }
                 byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
                 conn.setFixedLengthStreamingMode(bytes.length);
@@ -1104,7 +1213,19 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             for (String key : obj.keySet()) {
                 Object val = obj.get(key);
                 String path = StringUtils.isEmpty(prefix) ? key : prefix + "." + key;
-                if (val instanceof JSONObject || val instanceof JSONArray) {
+                if (val instanceof JSONObject || val instanceof JSONArray || val instanceof Map || val instanceof List) {
+                    flattenFields(path, val, out, depth + 1);
+                } else {
+                    out.put(path, val == null ? "" : String.valueOf(val));
+                }
+            }
+        } else if (node instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) node;
+            for (Map.Entry<String, Object> e : map.entrySet()) {
+                Object val = e.getValue();
+                String path = StringUtils.isEmpty(prefix) ? e.getKey() : prefix + "." + e.getKey();
+                if (val instanceof JSONObject || val instanceof JSONArray || val instanceof Map || val instanceof List) {
                     flattenFields(path, val, out, depth + 1);
                 } else {
                     out.put(path, val == null ? "" : String.valueOf(val));
@@ -1113,8 +1234,12 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         } else if (node instanceof JSONArray) {
             JSONArray arr = (JSONArray) node;
             if (!arr.isEmpty()) {
-                // use first element as schema sample
                 flattenFields(prefix, arr.get(0), out, depth + 1);
+            }
+        } else if (node instanceof List) {
+            List<?> list = (List<?>) node;
+            if (!list.isEmpty()) {
+                flattenFields(prefix, list.get(0), out, depth + 1);
             }
         } else if (StringUtils.isNotEmpty(prefix)) {
             out.put(prefix, String.valueOf(node));
@@ -1135,6 +1260,29 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             entity.setDatasourceGroup(entity.getDatasourceGroup().trim());
         } else {
             entity.setDatasourceGroup("Default");
+        }
+        // 旧数据/未传：默认 HTTP；WebService 强制 POST
+        entity.setDatasourceType(resolveDatasourceType(entity));
+        if (isWebService(entity)) {
+            entity.setReqType(REQ_POST);
+        }
+    }
+
+    private void fillReqParams(DsApiDatasource entity) {
+        if (entity == null) {
+            return;
+        }
+        if (StringUtils.isNotEmpty(entity.getReqParamsJson())) {
+            entity.setReqParams(JSON.parseObject(entity.getReqParamsJson(), DsApiReqParams.class));
+        }
+        if (entity.getReqParams() == null) {
+            entity.setReqParams(new DsApiReqParams());
+        }
+        // 读库兼容：历史行 datasource_type 为空时按 HTTP
+        if (StringUtils.isEmpty(entity.getDatasourceType())) {
+            entity.setDatasourceType(API_TYPE_HTTP);
+        } else {
+            entity.setDatasourceType(resolveDatasourceType(entity));
         }
     }
 
@@ -1157,18 +1305,6 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             entity.setReqParamsJson(JSON.toJSONString(entity.getReqParams()));
         } else if (entity.getReqParamsJson() == null) {
             entity.setReqParamsJson("{}");
-        }
-    }
-
-    private void fillReqParams(DsApiDatasource entity) {
-        if (entity == null) {
-            return;
-        }
-        if (StringUtils.isNotEmpty(entity.getReqParamsJson())) {
-            entity.setReqParams(JSON.parseObject(entity.getReqParamsJson(), DsApiReqParams.class));
-        }
-        if (entity.getReqParams() == null) {
-            entity.setReqParams(new DsApiReqParams());
         }
     }
 

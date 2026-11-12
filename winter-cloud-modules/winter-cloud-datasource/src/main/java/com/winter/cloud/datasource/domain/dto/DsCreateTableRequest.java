@@ -20,14 +20,22 @@ import java.util.List;
 @Schema(description = "建表请求")
 public class DsCreateTableRequest {
 
+    /** JDBC 数据源 ID */
     @NotNull
+    @Schema(description = "数据源ID")
     private Long datasourceId;
 
+    /** 表名 */
     @NotBlank
+    @Schema(description = "表名")
     private String tableName;
 
+    /** 表注释（可空） */
+    @Schema(description = "表注释")
     private String comment;
 
+    /** 列定义列表（至少一列） */
     @NotEmpty
+    @Schema(description = "列定义列表")
     private List<DsColumnDef> columns;
 }

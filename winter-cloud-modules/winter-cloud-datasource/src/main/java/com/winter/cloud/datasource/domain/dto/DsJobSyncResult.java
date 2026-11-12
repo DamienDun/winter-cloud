@@ -17,7 +17,7 @@ public class DsJobSyncResult {
     /** 写入失败行数 */
     private int errorCount;
 
-    /** 自动新建表 */
+    /** 是否自动新建了目标表 */
     private boolean tableCreated;
 
     /** 自动新增列数量 */
@@ -26,7 +26,7 @@ public class DsJobSyncResult {
     /** 自动修改列（类型/注释）数量 */
     private int columnsModified;
 
-    /** 摘要信息（短） */
+    /** 摘要信息（短文本） */
     private String message;
 
     /** 分步详情日志（写入作业日志 jobMessage） */
