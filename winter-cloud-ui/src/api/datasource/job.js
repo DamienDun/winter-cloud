@@ -52,6 +52,15 @@ export function stopJob(id) {
   })
 }
 
+/** 批量开启/停用：ids 为字符串数组，status 0停用/1开启 */
+export function changeJobStatus(ids, status) {
+  return request({
+    url: '/datasource/job/changeStatus',
+    method: 'put',
+    data: { ids, status }
+  })
+}
+
 export function executeJob(id) {
   return request({
     url: '/datasource/job/execute/' + id,

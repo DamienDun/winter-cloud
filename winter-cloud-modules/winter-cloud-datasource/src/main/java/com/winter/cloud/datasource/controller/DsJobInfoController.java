@@ -7,6 +7,7 @@ import com.winter.cloud.common.core.web.page.TableDataInfo;
 import com.winter.cloud.common.log.annotation.Log;
 import com.winter.cloud.common.log.enums.BusinessType;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
+import com.winter.cloud.datasource.domain.dto.DsChangeStatusRequest;
 import com.winter.cloud.datasource.domain.entity.DsJobInfo;
 import com.winter.cloud.datasource.service.IDsJobInfoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -106,6 +107,30 @@ public class DsJobInfoController extends BaseController {
         } catch (Exception e) {
             return error(e.getMessage());
         }
+    }
+
+    @RequiresPermissions("datasource:job:changeStatus")
+    @Log(title = "作业信息", businessType = BusinessType.UPDATE)
+    @PutMapping("/changeStatus")
+    @Operation(summary = "批量开启/停用作业")
+    public AjaxResult changeStatus(@RequestBody DsChangeStatusRequest request) {
+        try {
+            Long[] idArr = parseIds(request == null ? null : request.getIds());
+            return toAjax(jobInfoService.changeStatus(idArr, request == null ? null : request.getStatus()));
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
+    private Long[] parseIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new IllegalArgumentException("请选择作业");
+        }
+        return ids.stream()
+                .filter(s -> s != null && !s.trim().isEmpty())
+                .map(String::trim)
+                .map(Long::valueOf)
+                .toArray(Long[]::new);
     }
 
     @RequiresPermissions("datasource:job:execute")

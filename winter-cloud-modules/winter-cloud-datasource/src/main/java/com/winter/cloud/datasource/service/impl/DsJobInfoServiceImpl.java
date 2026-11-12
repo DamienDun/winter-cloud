@@ -153,6 +153,58 @@ public class DsJobInfoServiceImpl implements IDsJobInfoService {
     }
 
     @Override
+    public int changeStatus(Long[] ids, Integer status) {
+        // 不加类级事务：逐条调用 start/stop 各自独立事务，避免一条失败导致整批回滚
+        if (ids == null || ids.length == 0) {
+            throw new IllegalArgumentException("请选择作业");
+        }
+        if (status == null
+                || (status != DsJobConstants.JOB_STATUS_DISABLED && status != DsJobConstants.JOB_STATUS_ENABLED)) {
+            throw new IllegalArgumentException("状态只能是 0(停用) 或 1(开启)");
+        }
+        List<String> errors = new ArrayList<>();
+        int ok = 0;
+        for (Long id : ids) {
+            if (id == null) {
+                continue;
+            }
+            try {
+                DsJobInfo job = requireJob(id);
+                if (status == DsJobConstants.JOB_STATUS_ENABLED) {
+                    if (Integer.valueOf(DsJobConstants.JOB_STATUS_ENABLED).equals(job.getJobStatus())) {
+                        ok++;
+                        continue;
+                    }
+                    start(id);
+                } else {
+                    if (Integer.valueOf(DsJobConstants.JOB_STATUS_DISABLED).equals(job.getJobStatus())) {
+                        ok++;
+                        continue;
+                    }
+                    stop(id);
+                }
+                ok++;
+            } catch (Exception e) {
+                String name = String.valueOf(id);
+                try {
+                    DsJobInfo j = jobInfoMapper.selectById(id);
+                    if (j != null && j.getJobName() != null) {
+                        name = j.getJobName();
+                    }
+                } catch (Exception ignore) {
+                    // ignore
+                }
+                errors.add(name + ": " + (e.getMessage() == null ? e.toString() : e.getMessage()));
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new IllegalStateException("部分作业状态变更失败（已处理 " + ok + " 条）: "
+                    + String.join("; ", errors));
+        }
+        return ok;
+    }
+
+    @Override
     public void execute(Long id) {
         DsJobInfo job = requireJob(id);
         if (job.getXxlJobId() == null) {

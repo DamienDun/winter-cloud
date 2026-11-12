@@ -25,6 +25,15 @@ public interface IDsJobInfoService {
 
     void stop(Long id);
 
+    /**
+     * 批量开启/停用（同步 XXL-JOB）。
+     *
+     * @param ids    作业主键
+     * @param status 1 开启，0 停用
+     * @return 成功处理条数（含已是目标状态而跳过的）
+     */
+    int changeStatus(Long[] ids, Integer status);
+
     void execute(Long id);
 
     List<String> nextTriggerTime(String cron);

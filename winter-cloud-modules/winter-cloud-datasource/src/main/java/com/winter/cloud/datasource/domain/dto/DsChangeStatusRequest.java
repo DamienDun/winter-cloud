@@ -6,7 +6,7 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 批量修改状态请求（JDBC / API 数据源共用）
+ * 批量修改状态请求（JDBC / API 数据源 / 作业信息共用）
  */
 @Data
 @Schema(description = "批量修改状态请求")

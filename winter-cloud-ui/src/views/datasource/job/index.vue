@@ -33,6 +33,12 @@
       <el-col :span="1.5">
         <el-button type="danger" plain icon="el-icon-delete" size="mini" :disabled="multiple" @click="handleDelete" v-hasPermi="['datasource:job:remove']">删除</el-button>
       </el-col>
+      <el-col :span="1.5">
+        <el-button type="success" plain icon="el-icon-video-play" size="mini" :disabled="multiple" @click="handleChangeStatus(1)" v-hasPermi="['datasource:job:changeStatus']">批量开启</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button type="warning" plain icon="el-icon-video-pause" size="mini" :disabled="multiple" @click="handleChangeStatus(0)" v-hasPermi="['datasource:job:changeStatus']">批量停用</el-button>
+      </el-col>
       <right-toolbar :showSearch.sync="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
@@ -312,7 +318,7 @@
 </template>
 
 <script>
-import { listJob, getJob, addJob, updateJob, delJob, startJob, stopJob, executeJob } from '@/api/datasource/job'
+import { listJob, getJob, addJob, updateJob, delJob, startJob, stopJob, changeJobStatus, executeJob } from '@/api/datasource/job'
 import { listAllDatasource } from '@/api/datasource/info'
 import { listApiDatasource, listApiOutputFields } from '@/api/datasource/api'
 import { listTables, listColumns } from '@/api/datasource/data'
@@ -1123,6 +1129,21 @@ export default {
       this.$modal.confirm('确认停用作业「' + row.jobName + '」？').then(() => stopJob(row.id)).then(() => {
         this.$modal.msgSuccess('已停用')
         this.getList()
+      }).catch(() => {})
+    },
+    /** 批量开启(1)/停用(0)，会同步 XXL-JOB */
+    handleChangeStatus(status) {
+      if (!this.ids || !this.ids.length) {
+        this.$modal.msgWarning('请先勾选作业')
+        return
+      }
+      const label = status === 1 ? '开启' : '停用'
+      const idList = this.ids.map(id => String(id))
+      this.$modal.confirm('确认批量' + label + '选中的 ' + idList.length + ' 个作业？').then(() => {
+        return changeJobStatus(idList, status)
+      }).then(() => {
+        this.getList()
+        this.$modal.msgSuccess('批量' + label + '成功')
       }).catch(() => {})
     },
     handleExecute(row) {
