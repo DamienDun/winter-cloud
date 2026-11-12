@@ -2,11 +2,17 @@ package com.winter.cloud.datasource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.winter.cloud.common.core.constant.SecurityConstants;
 import com.winter.cloud.common.core.utils.StringUtils;
+import com.winter.cloud.common.core.web.domain.AjaxResult;
 import com.winter.cloud.datasource.constant.DsJobConstants;
 import com.winter.cloud.datasource.domain.entity.DsJobLog;
 import com.winter.cloud.datasource.mapper.DsJobLogMapper;
 import com.winter.cloud.datasource.service.IDsJobLogService;
+import com.winter.cloud.datasource.support.DsJobCancelRegistry;
+import com.winter.cloud.xxljob.api.RemoteXxlJobLogService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -21,8 +27,16 @@ import java.util.Objects;
 @Service
 public class DsJobLogServiceImpl implements IDsJobLogService {
 
+    private static final Logger log = LoggerFactory.getLogger(DsJobLogServiceImpl.class);
+
     @Autowired
     private DsJobLogMapper jobLogMapper;
+
+    @Autowired
+    private DsJobCancelRegistry jobCancelRegistry;
+
+    @Autowired
+    private RemoteXxlJobLogService remoteXxlJobLogService;
 
     @Override
     public List<DsJobLog> selectList(DsJobLog query) {
@@ -59,6 +73,47 @@ public class DsJobLogServiceImpl implements IDsJobLogService {
     @Override
     public int update(DsJobLog entity) {
         return jobLogMapper.updateById(entity);
+    }
+
+    @Override
+    public int patchJobMessage(Long id, String jobMessage) {
+        if (id == null) {
+            return 0;
+        }
+        return jobLogMapper.update(null, Wrappers.<DsJobLog>lambdaUpdate()
+                .set(DsJobLog::getJobMessage, jobMessage)
+                .eq(DsJobLog::getId, id));
+    }
+
+    @Override
+    public void kill(Long id) {
+        DsJobLog jobLog = jobLogMapper.selectById(id);
+        if (jobLog == null) {
+            throw new IllegalArgumentException("作业日志不存在");
+        }
+        if (!Objects.equals(jobLog.getExecuteStatus(), DsJobConstants.LOG_RUNNING)) {
+            throw new IllegalStateException("任务未在执行中，无法终止");
+        }
+        jobCancelRegistry.requestCancel(id);
+        String tip = "\n[收到终止请求 " + new Date() + "]\n";
+        String msg = (jobLog.getJobMessage() == null ? "" : jobLog.getJobMessage()) + tip;
+        patchJobMessage(id, msg);
+
+        // 先打本地终止标记（翻页循环会读到），再通知 XXL；XXL 失败也不撤回本地标记
+        if (jobLog.getXxlLogId() != null) {
+            try {
+                int xxlLogId = jobLog.getXxlLogId().intValue();
+                AjaxResult rsp = remoteXxlJobLogService.killInner(xxlLogId, SecurityConstants.INNER);
+                if (rsp == null || rsp.isError()) {
+                    String err = rsp == null ? "empty response" : String.valueOf(rsp.get(AjaxResult.MSG_TAG));
+                    log.warn("xxl kill failed, dsLogId={}, xxlLogId={}, msg={}", id, xxlLogId, err);
+                    patchJobMessage(id, msg + "[本地已标记终止；XXL 通知失败: " + err + "]\n");
+                }
+            } catch (Exception e) {
+                log.warn("xxl kill error, dsLogId={}", id, e);
+                patchJobMessage(id, msg + "[本地已标记终止；XXL 通知异常: " + e.getMessage() + "]\n");
+            }
+        }
     }
 
     @Override

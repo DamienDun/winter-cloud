@@ -55,6 +55,11 @@ public class RemoteXxlJobLogFallbackFactory implements FallbackFactory<RemoteXxl
             public AjaxResult kill(int id) {
                 return fail("终止任务");
             }
+
+            @Override
+            public AjaxResult killInner(int id, String source) {
+                return fail("内部终止任务");
+            }
         };
     }
 }

@@ -53,4 +53,13 @@ public class DsJobLogController extends BaseController {
                 .map(String::trim).filter(s -> !s.isEmpty()).map(Long::valueOf).toArray(Long[]::new);
         return toAjax(jobLogService.deleteByIds(idArr));
     }
+
+    @RequiresPermissions("datasource:jobLog:remove")
+    @Log(title = "作业日志", businessType = BusinessType.UPDATE)
+    @PostMapping("/kill/{id}")
+    @Operation(summary = "终止执行中的任务")
+    public AjaxResult kill(@PathVariable("id") Long id) {
+        jobLogService.kill(id);
+        return success("已发送终止请求");
+    }
 }

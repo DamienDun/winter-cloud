@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS `ds_job_log` (
   `error_data_total` int(11) NOT NULL DEFAULT 0,
   `actual_update_data_total` int(11) NOT NULL DEFAULT 0,
   `job_message` text COMMENT '日志信息',
+  `xxl_log_id` bigint(20) DEFAULT NULL COMMENT 'XXL-JOB 调度日志ID，用于终止执行',
   `datasource_type` varchar(45) DEFAULT NULL,
   `remark` varchar(500) DEFAULT NULL,
   `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
@@ -202,6 +203,7 @@ CREATE TABLE IF NOT EXISTS `ds_api_datasource` (
   `api_url` varchar(512) NOT NULL COMMENT '接口地址',
   `req_type` tinyint(4) NOT NULL DEFAULT 1 COMMENT '请求方式：0 POST，1 GET',
   `data_item_key` varchar(512) DEFAULT NULL COMMENT '数据项KEY（响应取值路径）',
+  `page_api` tinyint(4) NOT NULL DEFAULT 0 COMMENT '是否分页接口：0否，1是',
   `req_params_json` mediumtext COMMENT '请求参数JSON',
   `rely_datasource_id` bigint(20) DEFAULT NULL COMMENT '依赖API数据源ID',
   `belong_to_rely_datasource` tinyint(4) NOT NULL DEFAULT 1 COMMENT '是否依赖数据源：0是，1否',
@@ -258,3 +260,10 @@ INSERT INTO sys_role_menu VALUES ('1', '2172');
 INSERT INTO sys_role_menu VALUES ('1', '2173');
 INSERT INTO sys_role_menu VALUES ('1', '2174');
 INSERT INTO sys_role_menu VALUES ('1', '2175');
+
+-- 已有库升级：作业日志增加 XXL 调度日志ID（终止任务用）
+-- MySQL 5.7 无 IF NOT EXISTS，重复执行会报列已存在，可忽略
+ALTER TABLE `ds_job_log` ADD COLUMN `xxl_log_id` bigint(20) DEFAULT NULL COMMENT 'XXL-JOB 调度日志ID，用于终止执行' AFTER `job_message`;
+
+-- 已有库升级：API 数据源是否分页接口
+ALTER TABLE `ds_api_datasource` ADD COLUMN `page_api` tinyint(4) NOT NULL DEFAULT 0 COMMENT '是否分页接口：0否，1是' AFTER `data_item_key`;

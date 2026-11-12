@@ -34,7 +34,7 @@ public class XxlJobLogController extends BaseController {
             rsp.setCode(200);
             rsp.setRows((java.util.List<?>) page.get("rows"));
             Object total = page.get("total");
-            rsp.setTotal(total == null ? 0L : Long.parseLong(String.valueOf(total)));
+            rsp.setTotal(total == null ? 0 : Integer.parseInt(String.valueOf(total)));
             return rsp;
         } catch (Exception e) {
             TableDataInfo rsp = new TableDataInfo();

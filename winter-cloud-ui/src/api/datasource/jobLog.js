@@ -21,3 +21,11 @@ export function delJobLog(ids) {
     method: 'delete'
   })
 }
+
+export function killJobLog(id) {
+  return request({
+    url: '/datasource/jobLog/kill/' + id,
+    method: 'post',
+    headers: { repeatSubmit: false }
+  })
+}

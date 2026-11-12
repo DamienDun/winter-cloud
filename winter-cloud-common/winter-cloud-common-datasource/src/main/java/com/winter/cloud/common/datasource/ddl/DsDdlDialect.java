@@ -4,6 +4,7 @@ import com.winter.cloud.common.datasource.ddl.model.DsColumnDef;
 import com.winter.cloud.common.datasource.ddl.model.DsIndexRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +28,17 @@ public interface DsDdlDialect {
     String buildDropTableSql(String tableName);
 
     List<String> buildAlterColumnSqls(String tableName, String action, DsColumnDef column);
+
+    /**
+     * 已有表调整主键：可选先 DROP PRIMARY KEY，再 ADD PRIMARY KEY。
+     * 不支持的方言默认返回空列表（调用方应跳过）。
+     *
+     * @param dropExisting 目标表当前是否已有主键需要先删除
+     * @param pkColumns    期望主键列（顺序即复合主键顺序）
+     */
+    default List<String> buildAlterPrimaryKeySqls(String tableName, boolean dropExisting, List<String> pkColumns) {
+        return Collections.emptyList();
+    }
 
     String buildCreateIndexSql(DsIndexRequest request);
 

@@ -57,6 +57,8 @@ export function testApiDatasource(data) {
   return request({
     url: '/datasource/api/test',
     method: 'post',
-    data: data
+    data: data,
+    // 测试可重复点，关闭防重复提交（否则同参 1 秒内会被静默拦截）
+    headers: { repeatSubmit: false }
   })
 }

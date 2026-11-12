@@ -47,9 +47,18 @@
       </el-table-column>
       <el-table-column label="耗时" align="center" prop="timeConsuming" width="90" />
       <el-table-column label="处理量" align="center" prop="handleDataTotal" width="80" />
-      <el-table-column label="操作" align="center" width="140" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="200" class-name="small-padding fixed-width">
         <template slot-scope="scope">
           <el-button size="mini" type="text" icon="el-icon-view" @click="handleView(scope.row)" v-hasPermi="['datasource:jobLog:query']">详情</el-button>
+          <el-button
+            v-if="Number(scope.row.executeStatus) === 0"
+            size="mini"
+            type="text"
+            icon="el-icon-close"
+            style="color:#F56C6C"
+            @click="handleKill(scope.row)"
+            v-hasPermi="['datasource:jobLog:remove']"
+          >终止</el-button>
           <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)" v-hasPermi="['datasource:jobLog:remove']">删除</el-button>
         </template>
       </el-table-column>
@@ -57,20 +66,36 @@
 
     <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
 
-    <el-dialog title="日志详情" :visible.sync="viewOpen" width="720px" append-to-body>
+    <el-dialog title="日志详情" :visible.sync="viewOpen" width="900px" append-to-body @close="stopPullLog">
       <el-descriptions :column="2" border size="small" v-if="viewForm">
         <el-descriptions-item label="作业名称">{{ viewForm.jobName }}</el-descriptions-item>
         <el-descriptions-item label="触发人">{{ viewForm.triggerUsername }}</el-descriptions-item>
         <el-descriptions-item label="触发方式">{{ viewForm.triggerType === 1 ? '定时' : '手动' }}</el-descriptions-item>
-        <el-descriptions-item label="执行状态">{{ statusLabel(viewForm.executeStatus) }}</el-descriptions-item>
+        <el-descriptions-item label="执行状态">
+          <el-tag :type="statusTag(viewForm.executeStatus)" size="mini">{{ statusLabel(viewForm.executeStatus) }}</el-tag>
+          <el-tag v-if="logPulling" size="mini" type="warning" style="margin-left: 8px">滚动刷新中...</el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="开始时间">{{ parseTime(viewForm.executeBeginTime) }}</el-descriptions-item>
         <el-descriptions-item label="结束时间">{{ parseTime(viewForm.executeEndTime) }}</el-descriptions-item>
         <el-descriptions-item label="耗时">{{ viewForm.timeConsuming }}</el-descriptions-item>
         <el-descriptions-item label="处理/更新/异常">{{ viewForm.handleDataTotal }} / {{ viewForm.actualUpdateDataTotal }} / {{ viewForm.errorDataTotal }}</el-descriptions-item>
-        <el-descriptions-item label="日志信息" :span="2">
-          <pre style="white-space: pre-wrap; margin: 0; font-family: inherit">{{ viewForm.jobMessage }}</pre>
-        </el-descriptions-item>
       </el-descriptions>
+      <div v-if="viewForm" style="margin-top: 12px;">
+        <div class="job-log-detail-toolbar">
+          <span style="font-weight: 600;">执行过程</span>
+          <el-button
+            v-if="Number(viewForm.executeStatus) === 0"
+            type="danger"
+            plain
+            size="mini"
+            icon="el-icon-close"
+            :loading="killing"
+            @click="handleKill(viewForm)"
+            v-hasPermi="['datasource:jobLog:remove']"
+          >终止任务</el-button>
+        </div>
+        <pre ref="logConsole" class="job-log-detail">{{ viewForm.jobMessage || '-' }}</pre>
+      </div>
       <div slot="footer" class="dialog-footer">
         <el-button @click="viewOpen = false">关 闭</el-button>
       </div>
@@ -79,7 +104,7 @@
 </template>
 
 <script>
-import { listJobLog, getJobLog, delJobLog } from '@/api/datasource/jobLog'
+import { listJobLog, getJobLog, delJobLog, killJobLog } from '@/api/datasource/jobLog'
 
 export default {
   name: 'DatasourceJobLog',
@@ -93,6 +118,10 @@ export default {
       multiple: true,
       viewOpen: false,
       viewForm: null,
+      logPulling: false,
+      pullTimer: null,
+      pullInFlight: false,
+      killing: false,
       queryParams: {
         pageNum: 1,
         pageSize: 10,
@@ -113,6 +142,9 @@ export default {
         this.handleQuery()
       }
     }
+  },
+  beforeDestroy() {
+    this.stopPullLog()
   },
   methods: {
     applyRouteQuery() {
@@ -135,7 +167,7 @@ export default {
       }
       listJobLog(params).then(res => {
         this.dataList = res.rows || []
-        this.total = res.total || 0
+        this.total = Number(res.total) || 0
         this.loading = false
       }).catch(() => { this.loading = false })
     },
@@ -160,9 +192,69 @@ export default {
       return ({ 0: 'warning', 1: 'success', 2: 'danger' })[v] || 'info'
     },
     handleView(row) {
+      this.stopPullLog()
       getJobLog(row.id).then(res => {
         this.viewForm = res.data || {}
         this.viewOpen = true
+        this.$nextTick(() => this.scrollLogToBottom())
+        // 执行中：定时拉详情并滚到底部
+        if (Number(this.viewForm.executeStatus) === 0) {
+          this.startPullLog()
+        }
+      })
+    },
+    startPullLog() {
+      this.logPulling = true
+      this.pullTimer = setInterval(() => this.pullLogOnce(), 2000)
+    },
+    pullLogOnce() {
+      if (!this.viewOpen || !this.viewForm || !this.viewForm.id || this.pullInFlight) {
+        return
+      }
+      this.pullInFlight = true
+      getJobLog(this.viewForm.id).then(res => {
+        const data = res.data || {}
+        this.viewForm = data
+        this.$nextTick(() => this.scrollLogToBottom())
+        if (Number(data.executeStatus) !== 0) {
+          this.stopPullLog()
+          this.getList()
+        }
+      }).catch(() => {}).finally(() => {
+        this.pullInFlight = false
+      })
+    },
+    scrollLogToBottom() {
+      const el = this.$refs.logConsole
+      if (el) {
+        el.scrollTop = el.scrollHeight
+      }
+    },
+    stopPullLog() {
+      this.logPulling = false
+      this.pullInFlight = false
+      if (this.pullTimer) {
+        clearInterval(this.pullTimer)
+        this.pullTimer = null
+      }
+    },
+    handleKill(row) {
+      if (!row || row.id == null) return
+      this.$modal.confirm('确认终止该任务执行？').then(() => {
+        this.killing = true
+        return killJobLog(row.id)
+      }).then(() => {
+        this.$modal.msgSuccess('已发送终止请求')
+        // 详情仍开着则继续轮询直到状态变为结束
+        if (this.viewOpen && this.viewForm && String(this.viewForm.id) === String(row.id)) {
+          if (!this.logPulling) {
+            this.startPullLog()
+          }
+          this.pullLogOnce()
+        }
+        this.getList()
+      }).catch(() => {}).finally(() => {
+        this.killing = false
       })
     },
     handleDelete(row) {
@@ -175,3 +267,27 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.job-log-detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.job-log-detail {
+  margin: 0;
+  max-height: 480px;
+  overflow: auto;
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: Consolas, Monaco, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #303133;
+}
+</style>

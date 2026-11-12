@@ -28,4 +28,11 @@ public class DsJobFieldMapping {
      */
     @Schema(description = "目标字段注释（可空）")
     private String targetComment;
+
+    /**
+     * 是否作为目标表主键（可多列组成复合主键）。
+     * null：兼容旧配置，JDBC 源沿用源列主键标记；true/false：以配置为准。
+     */
+    @Schema(description = "是否主键（可空，兼容旧数据）")
+    private Boolean primaryKey;
 }

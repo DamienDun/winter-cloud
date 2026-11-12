@@ -39,6 +39,10 @@ public class DsApiDatasource extends DefaultBaseEntity {
     @Schema(description = "数据项KEY（响应取值路径）")
     private String dataItemKey;
 
+    /** 0 否，1 是；默认否。是则作业同步按页拉取并分批写入 */
+    @Schema(description = "是否分页接口：0否，1是")
+    private Integer pageApi;
+
     @Schema(description = "请求参数JSON")
     private String reqParamsJson;
 

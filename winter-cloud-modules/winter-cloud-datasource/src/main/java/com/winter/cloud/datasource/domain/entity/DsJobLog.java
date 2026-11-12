@@ -69,6 +69,11 @@ public class DsJobLog extends DefaultBaseEntity {
     @Schema(description = "日志信息")
     private String jobMessage;
 
+    /** XXL-JOB 本次执行日志 ID，终止任务时回传调度中心 */
+    @JsonSerialize(using = ToStringSerializer.class)
+    @Schema(description = "XXL调度日志ID")
+    private Long xxlLogId;
+
     @Schema(description = "数据源类型")
     private String datasourceType;
 }

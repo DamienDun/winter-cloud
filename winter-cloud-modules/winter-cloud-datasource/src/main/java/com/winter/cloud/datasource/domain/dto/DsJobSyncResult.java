@@ -26,6 +26,9 @@ public class DsJobSyncResult {
     /** 自动修改列（类型/注释）数量 */
     private int columnsModified;
 
-    /** 摘要信息 */
+    /** 摘要信息（短） */
     private String message;
+
+    /** 分步详情日志（写入作业日志 jobMessage） */
+    private String detailLog;
 }

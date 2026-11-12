@@ -46,6 +46,9 @@
       <el-table-column label="请求" align="center" prop="reqType" width="80">
         <template slot-scope="scope">{{ scope.row.reqType === 0 ? 'POST' : 'GET' }}</template>
       </el-table-column>
+      <el-table-column label="分页" align="center" prop="pageApi" width="70">
+        <template slot-scope="scope">{{ Number(scope.row.pageApi) === 1 ? '是' : '否' }}</template>
+      </el-table-column>
       <el-table-column label="依赖源" align="center" prop="belongToRelyDatasource" width="100">
         <template slot-scope="scope">{{ scope.row.belongToRelyDatasource === 0 ? '是' : '否' }}</template>
       </el-table-column>
@@ -69,12 +72,13 @@
 
     <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
 
-    <el-dialog :title="title" :visible.sync="open" width="820px" append-to-body v-if="open">
-      <el-form ref="form" :model="form" :rules="rules" label-width="120px" size="small">
-        <el-row>
+    <el-dialog :title="title" :visible.sync="open" width="960px" append-to-body v-if="open" custom-class="api-ds-form-dialog">
+      <el-form ref="form" :model="form" :rules="rules" label-width="110px" size="small">
+        <el-divider content-position="left">基本信息</el-divider>
+        <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="数据源名称" prop="datasourceName">
-              <el-input v-model="form.datasourceName" maxlength="100" />
+              <el-input v-model="form.datasourceName" maxlength="100" placeholder="请输入名称" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -83,7 +87,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row>
+        <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="状态" prop="status">
               <el-radio-group v-model="form.status">
@@ -92,11 +96,18 @@
               </el-radio-group>
             </el-form-item>
           </el-col>
+          <el-col :span="12">
+            <el-form-item label="描述" prop="datasourceDesc">
+              <el-input v-model="form.datasourceDesc" maxlength="200" placeholder="可选" />
+            </el-form-item>
+          </el-col>
         </el-row>
+
+        <el-divider content-position="left">接口配置</el-divider>
         <el-form-item label="接口地址" prop="apiUrl">
-          <el-input v-model="form.apiUrl" placeholder="https://example.com/api" />
+          <el-input v-model="form.apiUrl" placeholder="http://host/api/path" />
         </el-form-item>
-        <el-row>
+        <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="请求方式" prop="reqType">
               <el-radio-group v-model="form.reqType">
@@ -106,123 +117,162 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="依赖数据源" prop="belongToRelyDatasource">
-              <el-radio-group v-model="form.belongToRelyDatasource" @change="onBelongRelyChange">
-                <el-radio :label="1">否</el-radio>
-                <el-radio :label="0">是</el-radio>
-              </el-radio-group>
+            <el-form-item label="数据项KEY" prop="dataItemKey">
+              <el-input v-model="form.dataItemKey" placeholder="data / data.list / rows" />
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="依赖API" prop="relyDatasourceId" v-if="form.belongToRelyDatasource === 0">
-          <el-select
-            v-model="form.relyDatasourceId"
-            clearable
-            filterable
-            :filter-method="filterRelyOptions"
-            :loading="relyLoading"
-            placeholder="输入名称模糊搜索并选择"
-            style="width: 100%"
-            @change="onRelyChange"
-            @visible-change="onRelyVisible"
-          >
-            <el-option
-              v-for="item in relyOptionsView"
-              :key="String(item.id)"
-              :label="item.datasourceName"
-              :value="String(item.id)"
-            >
-              <span>{{ item.datasourceName }}</span>
-              <span style="float: right; color: #909399; font-size: 12px">{{ item.reqType === 0 ? 'POST' : 'GET' }}</span>
-            </el-option>
-          </el-select>
+        <el-form-item label="分页接口" prop="pageApi">
+          <el-radio-group v-model="form.pageApi">
+            <el-radio :label="0">否</el-radio>
+            <el-radio :label="1">是</el-radio>
+          </el-radio-group>
         </el-form-item>
-        <el-form-item label="依赖出参填充" v-if="form.belongToRelyDatasource === 0 && form.relyDatasourceId">
-          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%">
+        <div class="api-ds-hint">
+          数据项 KEY 指向响应中的业务列表节点。勾选「分页接口」后：测试连接会把 pageSize 临时改为 2；作业同步按页拉取并逐页写入，避免内存堆积。
+        </div>
+
+        <el-divider content-position="left">依赖鉴权</el-divider>
+        <el-form-item label="依赖数据源" prop="belongToRelyDatasource">
+          <el-radio-group v-model="form.belongToRelyDatasource" @change="onBelongRelyChange">
+            <el-radio :label="1">否</el-radio>
+            <el-radio :label="0">是</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <template v-if="form.belongToRelyDatasource === 0">
+          <el-form-item label="依赖API" prop="relyDatasourceId">
             <el-select
-              v-model="fillField"
-              filterable
+              v-model="form.relyDatasourceId"
               clearable
-              :loading="fieldLoading"
-              placeholder="选择依赖接口出参"
-              style="width: 260px"
+              filterable
+              :filter-method="filterRelyOptions"
+              :loading="relyLoading"
+              placeholder="输入名称模糊搜索并选择"
+              style="width: 100%"
+              @change="onRelyChange"
+              @visible-change="onRelyVisible"
             >
               <el-option
-                v-for="f in relyFields"
-                :key="f.fieldName"
-                :label="f.fieldName"
-                :value="f.fieldName"
+                v-for="item in relyOptionsView"
+                :key="String(item.id)"
+                :label="item.datasourceName"
+                :value="String(item.id)"
               >
-                <span>{{ f.fieldName }}</span>
-                <span style="float: right; color: #909399; font-size: 12px; max-width: 140px; overflow: hidden; text-overflow: ellipsis">{{ f.sampleValue }}</span>
+                <span>{{ item.datasourceName }}</span>
+                <span style="float: right; color: #909399; font-size: 12px">{{ item.reqType === 0 ? 'POST' : 'GET' }}</span>
               </el-option>
             </el-select>
-            <el-select v-model="fillTarget" style="width: 110px">
-              <el-option label="请求头" value="headers" />
-              <el-option label="入参" value="params" />
-            </el-select>
-            <el-input v-model="fillName" placeholder="参数名(如 Authorization)" style="width: 180px" />
-            <el-button type="primary" plain size="mini" :disabled="!fillField" @click="applyRelyField">填入</el-button>
-            <el-button type="text" size="mini" :loading="fieldLoading" @click="loadRelyFields">刷新出参</el-button>
+          </el-form-item>
+          <el-form-item label="出参填充" v-if="form.relyDatasourceId" label-width="110px" class="api-ds-fill-item">
+            <div class="api-ds-panel api-ds-fill-panel">
+              <div class="api-ds-panel-toolbar">
+                <span class="api-ds-panel-title">将依赖接口出参写入请求头/入参</span>
+                <el-button type="text" size="mini" icon="el-icon-refresh" :loading="fieldLoading" @click="loadRelyFields">刷新出参</el-button>
+              </div>
+              <div class="api-ds-fill-row">
+                <el-select
+                  v-model="fillField"
+                  filterable
+                  clearable
+                  :loading="fieldLoading"
+                  placeholder="依赖出参字段"
+                  class="api-ds-fill-field"
+                >
+                  <el-option
+                    v-for="f in relyFields"
+                    :key="f.fieldName"
+                    :label="f.fieldName"
+                    :value="f.fieldName"
+                  >
+                    <span>{{ f.fieldName }}</span>
+                    <span style="float: right; color: #909399; font-size: 12px; max-width: 140px; overflow: hidden; text-overflow: ellipsis">{{ f.sampleValue }}</span>
+                  </el-option>
+                </el-select>
+                <el-select v-model="fillTarget" class="api-ds-fill-target">
+                  <el-option label="请求头" value="headers" />
+                  <el-option label="入参" value="params" />
+                </el-select>
+                <el-input v-model="fillName" placeholder="参数名，如 Authorization" class="api-ds-fill-name" />
+                <el-button type="primary" plain size="mini" :disabled="!fillField" @click="applyRelyField">填入</el-button>
+              </div>
+              <!-- v-pre：禁止把 {{rely.xxx}} 当 Vue 表达式（HTML 实体仍会被解码成 mustache 导致整页渲染报错） -->
+              <div class="api-ds-hint api-ds-hint--inpanel" v-pre>填入后值为 <code>{{rely.字段路径}}</code>，测试/同步时自动替换为依赖接口实际出参。</div>
+            </div>
+          </el-form-item>
+        </template>
+
+        <el-divider content-position="left">请求参数</el-divider>
+        <el-form-item label-width="0" class="api-ds-block-item">
+          <div class="api-ds-panel">
+            <div class="api-ds-panel-toolbar">
+              <span class="api-ds-panel-title">Headers</span>
+              <el-button type="text" icon="el-icon-plus" @click="addParamRow('headers')">添加</el-button>
+            </div>
+            <div class="api-ds-panel-body">
+              <el-table :data="(form.reqParams && form.reqParams.headers) || []" size="mini" border empty-text="暂无请求头" max-height="220">
+                <el-table-column label="Name" prop="name" min-width="140">
+                  <template slot-scope="scope"><el-input v-model="scope.row.name" size="mini" placeholder="如 svolt-portal-auth" /></template>
+                </el-table-column>
+                <el-table-column label="Value" prop="value" min-width="200">
+                  <template slot-scope="scope"><el-input v-model="scope.row.value" size="mini" placeholder="支持 rely.token 占位" /></template>
+                </el-table-column>
+                <el-table-column label="启用" width="70" align="center">
+                  <template slot-scope="scope"><el-switch v-model="scope.row.isAvailable" :active-value="0" :inactive-value="1" /></template>
+                </el-table-column>
+                <el-table-column width="50" align="center">
+                  <template slot-scope="scope"><el-button type="text" icon="el-icon-delete" @click="form.reqParams.headers.splice(scope.$index, 1)" /></template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
-          <div style="color: #909399; font-size: 12px; margin-top: 6px">填入后值为 <code v-pre>{{rely.字段路径}}</code>，测试连接时会自动替换为依赖接口实际出参</div>
         </el-form-item>
-        <el-form-item label="数据项KEY" prop="dataItemKey">
-          <el-input v-model="form.dataItemKey" placeholder="data / data.list" />
+        <el-form-item label-width="0" class="api-ds-block-item">
+          <div class="api-ds-panel">
+            <div class="api-ds-panel-toolbar">
+              <span class="api-ds-panel-title">Params（查询参数）</span>
+              <el-button type="text" icon="el-icon-plus" @click="addParamRow('params')">添加</el-button>
+            </div>
+            <div class="api-ds-panel-body">
+              <el-table :data="(form.reqParams && form.reqParams.params) || []" size="mini" border empty-text="暂无入参" max-height="220">
+                <el-table-column label="Name" prop="name" min-width="140">
+                  <template slot-scope="scope"><el-input v-model="scope.row.name" size="mini" placeholder="如 pageNum" /></template>
+                </el-table-column>
+                <el-table-column label="Value" prop="value" min-width="200">
+                  <template slot-scope="scope"><el-input v-model="scope.row.value" size="mini" /></template>
+                </el-table-column>
+                <el-table-column label="启用" width="70" align="center">
+                  <template slot-scope="scope"><el-switch v-model="scope.row.isAvailable" :active-value="0" :inactive-value="1" /></template>
+                </el-table-column>
+                <el-table-column width="50" align="center">
+                  <template slot-scope="scope"><el-button type="text" icon="el-icon-delete" @click="form.reqParams.params.splice(scope.$index, 1)" /></template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </div>
         </el-form-item>
-        <el-form-item label="Headers">
-          <el-button type="text" icon="el-icon-plus" @click="addParamRow('headers')">添加</el-button>
-          <el-table :data="form.reqParams.headers" size="mini" border>
-            <el-table-column label="Name" prop="name"><template slot-scope="scope"><el-input v-model="scope.row.name" size="mini" /></template></el-table-column>
-            <el-table-column label="Value" prop="value"><template slot-scope="scope"><el-input v-model="scope.row.value" size="mini" /></template></el-table-column>
-            <el-table-column label="启用" width="70" align="center">
-              <template slot-scope="scope"><el-switch v-model="scope.row.isAvailable" :active-value="0" :inactive-value="1" /></template>
-            </el-table-column>
-            <el-table-column width="50" align="center"><template slot-scope="scope"><el-button type="text" icon="el-icon-delete" @click="form.reqParams.headers.splice(scope.$index, 1)" /></template></el-table-column>
-          </el-table>
+        <el-form-item label-width="0" class="api-ds-block-item" v-if="form.reqType === 0">
+          <div class="api-ds-panel">
+            <div class="api-ds-panel-toolbar">
+              <span class="api-ds-panel-title">Body（JSON）</span>
+            </div>
+            <div class="api-ds-panel-body">
+              <el-input v-model="form.reqParams.body" type="textarea" :rows="5" placeholder='{"pageNum":1,"pageSize":100}' class="api-ds-body-input" />
+            </div>
+          </div>
         </el-form-item>
-        <el-form-item label="Params">
-          <el-button type="text" icon="el-icon-plus" @click="addParamRow('params')">添加</el-button>
-          <el-table :data="form.reqParams.params" size="mini" border>
-            <el-table-column label="Name" prop="name"><template slot-scope="scope"><el-input v-model="scope.row.name" size="mini" /></template></el-table-column>
-            <el-table-column label="Value" prop="value"><template slot-scope="scope"><el-input v-model="scope.row.value" size="mini" /></template></el-table-column>
-            <el-table-column label="启用" width="70" align="center">
-              <template slot-scope="scope"><el-switch v-model="scope.row.isAvailable" :active-value="0" :inactive-value="1" /></template>
-            </el-table-column>
-            <el-table-column width="50" align="center"><template slot-scope="scope"><el-button type="text" icon="el-icon-delete" @click="form.reqParams.params.splice(scope.$index, 1)" /></template></el-table-column>
-          </el-table>
-        </el-form-item>
-        <el-form-item label="Body" v-if="form.reqType === 0">
-          <el-input v-model="form.reqParams.body" type="textarea" :rows="4" placeholder='{"key":"value"}' />
-        </el-form-item>
-        <el-form-item label="描述" prop="datasourceDesc">
-          <el-input v-model="form.datasourceDesc" maxlength="200" />
-        </el-form-item>
+        <div class="api-ds-hint">
+          作业同步自动翻页：Body/入参含 pageNum（或 pageNo/page/current）时，从第 1 页翻到业务数组为空；测试连接只请求当前配置的一页。
+        </div>
+
+        <el-divider content-position="left">其它</el-divider>
         <el-form-item label="备注" prop="remark">
-          <el-input v-model="form.remark" type="textarea" :rows="2" />
+          <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="可选" />
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
         <el-button type="warning" plain icon="el-icon-connection" :loading="testing" @click="submitTest" v-hasPermi="['datasource:api:test']">测试连接</el-button>
         <el-button type="primary" @click="submitForm">确 定</el-button>
         <el-button @click="cancel">取 消</el-button>
-      </div>
-    </el-dialog>
-
-    <el-dialog title="测试结果" :visible.sync="testOpen" width="780px" append-to-body>
-      <el-descriptions :column="2" border size="small" v-if="testResult">
-        <el-descriptions-item label="状态">
-          <el-tag :type="testResult.testStatus === 0 ? 'success' : 'danger'" size="mini">
-            {{ testResult.testStatus === 0 ? '成功' : '失败' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="耗时">{{ testResult.testTime != null ? testResult.testTime + ' ms' : '-' }}</el-descriptions-item>
-        <el-descriptions-item label="响应" :span="2">
-          <pre class="view-json-block view-json-block--tall">{{ formatJsonText(testResult.testResult) }}</pre>
-        </el-descriptions-item>
-      </el-descriptions>
-      <div slot="footer" class="dialog-footer">
-        <el-button @click="testOpen = false">关 闭</el-button>
       </div>
     </el-dialog>
 
@@ -235,6 +285,7 @@
         <el-descriptions-item label="URL" :span="2">{{ viewForm.apiUrl || '-' }}</el-descriptions-item>
         <el-descriptions-item label="请求方式">{{ viewForm.reqType === 0 ? 'POST' : 'GET' }}</el-descriptions-item>
         <el-descriptions-item label="数据项KEY">{{ viewForm.dataItemKey || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="分页接口">{{ Number(viewForm.pageApi) === 1 ? '是' : '否' }}</el-descriptions-item>
         <el-descriptions-item label="依赖数据源">{{ viewForm.belongToRelyDatasource === 0 ? '是' : '否' }}</el-descriptions-item>
         <el-descriptions-item label="依赖API">
           <template v-if="viewForm.belongToRelyDatasource === 0">
@@ -307,7 +358,6 @@ export default {
       multiple: true,
       open: false,
       viewOpen: false,
-      testOpen: false,
       title: '',
       viewForm: null,
       viewRelyName: '',
@@ -333,6 +383,7 @@ export default {
         datasourceGroup: 'Default',
         reqType: 1,
         status: 1,
+        pageApi: 0,
         belongToRelyDatasource: 1,
         reqParams: { params: [], headers: [], body: '', page: [], preRequestScript: '' }
       },
@@ -453,7 +504,8 @@ export default {
           id: row.id != null ? String(row.id) : row.id,
           relyDatasourceId: row.relyDatasourceId != null ? String(row.relyDatasourceId) : row.relyDatasourceId
         }))
-        this.total = res.total || 0
+        // 后端 total 可能是字符串，Pagination 的 prop 要求 Number
+        this.total = Number(res.total) || 0
         this.loading = false
       }).catch(() => { this.loading = false })
     },
@@ -569,6 +621,7 @@ export default {
         apiUrl: undefined,
         reqType: 1,
         dataItemKey: undefined,
+        pageApi: 0,
         relyDatasourceId: undefined,
         belongToRelyDatasource: 1,
         datasourceDesc: undefined,
@@ -576,6 +629,8 @@ export default {
         remark: undefined,
         reqParams: this.emptyReqParams()
       }
+      this.clearTestResultOverlay()
+      this.testResult = null
       this.resetForm('form')
     },
     addParamRow(key) {
@@ -583,6 +638,7 @@ export default {
       this.form.reqParams[key].push({ name: '', value: '', type: 'string', isAvailable: 0 })
     },
     handleAdd() {
+      this.clearTestResultOverlay()
       this.reset()
       this.open = true
       this.title = '新增API数据源'
@@ -607,15 +663,18 @@ export default {
       })
     },
     handleUpdate(row) {
+      this.clearTestResultOverlay()
       this.reset()
       // 必须用字符串ID请求，禁止 Number(row.id) 丢精度
       const id = row && row.id != null ? String(row.id) : String(this.ids[0])
       getApiDatasource(id).then(res => {
         const data = Object.assign({}, res.data || {})
-        data.reqParams = data.reqParams || this.emptyReqParams()
-        data.reqParams.params = data.reqParams.params || []
-        data.reqParams.headers = data.reqParams.headers || []
-        data.reqParams.page = data.reqParams.page || []
+        data.reqParams = this.normalizeReqParams(data.reqParams || data.reqParamsJson)
+        // 接口可能返回字符串 "0"/"1"，统一成数字，否则 v-if === 0 不成立、依赖区不渲染
+        data.belongToRelyDatasource = data.belongToRelyDatasource == null ? 1 : Number(data.belongToRelyDatasource)
+        data.pageApi = data.pageApi == null ? 0 : Number(data.pageApi)
+        data.reqType = data.reqType == null ? 1 : Number(data.reqType)
+        data.status = data.status == null ? 1 : Number(data.status)
         // 雪花ID统一转字符串，与依赖下拉 option value 对齐
         if (data.id != null) data.id = String(data.id)
         if (!data.datasourceGroup) data.datasourceGroup = 'Default'
@@ -627,17 +686,43 @@ export default {
         this.title = '修改API数据源'
         if (this.form.belongToRelyDatasource === 0) {
           this.loadRelyOptions().then(list => {
-            const hit = (list || []).some(i => String(i.id) === relyId)
-            if (relyId && !hit) {
-              this.$modal.msgWarning('依赖API(' + relyId + ')不在候选列表中，可能已被删除或停用')
-            }
-            this.$set(this.form, 'relyDatasourceId', relyId)
             if (relyId) {
+              this.ensureRelyOption(relyId, list)
+              this.$set(this.form, 'relyDatasourceId', relyId)
               this.loadRelyFields()
             }
           })
         }
       })
+    },
+    /** 保证依赖下拉能回显名称：候选里没有时补一条占位 option */
+    ensureRelyOption(relyId, list) {
+      const id = String(relyId)
+      const exists = (list || []).some(i => String(i.id) === id)
+      if (exists) return
+      const placeholder = { id: id, datasourceName: '依赖API(' + id + ')', reqType: 1, status: 0 }
+      this.relyOptions = [placeholder].concat(this.relyOptions || [])
+      this.relyOptionsView = this.relyOptions
+      this.$modal.msgWarning('依赖API(' + id + ')不在候选列表中，可能已被删除或停用')
+    },
+    normalizeReqParams(raw) {
+      const empty = this.emptyReqParams()
+      if (raw == null || raw === '') return empty
+      let obj = raw
+      if (typeof raw === 'string') {
+        try {
+          obj = JSON.parse(raw)
+        } catch (e) {
+          return empty
+        }
+      }
+      return {
+        params: obj.params || [],
+        headers: obj.headers || [],
+        body: obj.body || '',
+        page: obj.page || [],
+        preRequestScript: obj.preRequestScript || ''
+      }
     },
     cancel() {
       this.open = false
@@ -664,34 +749,90 @@ export default {
     handleTestRow(row) {
       this.testing = true
       testApiDatasource({ id: row.id }).then(res => {
-        this.testResult = res.data || res
-        this.testOpen = true
-        if (this.testResult.testStatus === 0) this.$modal.msgSuccess('连接成功')
+        this.showTestResult(res.data || res)
       }).catch(err => {
         const data = (err && err.data) || (err.response && err.response.data && err.response.data.data)
         if (data) {
-          this.testResult = data
-          this.testOpen = true
+          this.showTestResult(data)
+        } else if (err && err.message) {
+          this.$modal.msgError(err.message)
         }
       }).finally(() => { this.testing = false })
     },
     submitTest() {
+      if (!this.$refs.form) {
+        this.$modal.msgError('表单未就绪，请关闭后重试')
+        return
+      }
       this.$refs.form.validate(valid => {
-        if (!valid) return
+        if (!valid) {
+          this.$modal.msgWarning('请先完善必填项后再测试')
+          return
+        }
         this.testing = true
         testApiDatasource(this.form).then(res => {
-          this.testResult = res.data || res
-          this.testOpen = true
-          if (this.testResult.testStatus === 0) this.$modal.msgSuccess('连接成功')
+          this.showTestResult(res.data || res)
         }).catch(err => {
           const data = (err && err.data) || (err.response && err.response.data && err.response.data.data)
           if (data) {
-            this.testResult = data
-            this.testOpen = true
+            this.showTestResult(data)
+          } else if (err && err.message) {
+            this.$modal.msgError(err.message)
           }
         }).finally(() => { this.testing = false })
       })
+    },
+    showTestResult(data) {
+      this.clearTestResultOverlay()
+      this.testResult = data || {}
+      const ok = this.testResult.testStatus === 0
+      const cost = this.testResult.testTime != null ? (this.testResult.testTime + ' ms') : '-'
+      const body = this.escapeHtml(this.formatJsonText(this.testResult.testResult))
+      // MessageBox 由 PopupManager 管理层级，能稳定压在编辑 Dialog 之上，且不会残留透明遮罩
+      this.$msgbox({
+        title: '测试结果',
+        message:
+          '<div class="api-test-result-msg">' +
+          '<p><b>状态：</b><span class="' + (ok ? 'is-ok' : 'is-fail') + '">' + (ok ? '成功' : '失败') + '</span>' +
+          '&nbsp;&nbsp;<b>耗时：</b>' + cost + '</p>' +
+          '<pre class="api-test-result-msg__pre">' + body + '</pre>' +
+          '</div>',
+        dangerouslyUseHTMLString: true,
+        customClass: 'api-test-result-msgbox',
+        confirmButtonText: '关 闭',
+        closeOnClickModal: false,
+        closeOnPressEscape: true
+      }).catch(() => {})
+      if (ok) {
+        this.$modal.msgSuccess('连接成功')
+      } else if (this.testResult.testStatus != null) {
+        this.$modal.msgError('连接失败')
+      }
+    },
+    escapeHtml(text) {
+      return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+    },
+    /** 清掉历史测试遮罩残留，避免挡住房编辑框点击 */
+    clearTestResultOverlay() {
+      if (this._testResultPortal) {
+        const el = this._testResultPortal.$el
+        try {
+          this._testResultPortal.$destroy()
+        } catch (e) { /* ignore */ }
+        if (el && el.parentNode) el.parentNode.removeChild(el)
+        this._testResultPortal = null
+      }
+      document.querySelectorAll('.api-test-result-portal').forEach(node => {
+        if (node && node.parentNode) node.parentNode.removeChild(node)
+      })
     }
+  },
+  beforeDestroy() {
+    this.clearTestResultOverlay()
   }
 }
 </script>
@@ -723,5 +864,112 @@ export default {
 }
 .view-json-block--tall {
   max-height: 420px;
+}
+.api-ds-hint {
+  margin: 0 0 12px 110px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.api-ds-hint--inpanel {
+  margin: 8px 0 0;
+}
+.api-ds-block-item {
+  margin-bottom: 12px;
+}
+.api-ds-block-item >>> .el-form-item__content {
+  margin-left: 0 !important;
+}
+.api-ds-fill-item >>> .el-form-item__content {
+  line-height: normal;
+}
+.api-ds-panel {
+  width: 100%;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  background: #fff;
+  overflow: hidden;
+}
+.api-ds-panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #ebeef5;
+  background: #fafbfc;
+}
+.api-ds-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+.api-ds-panel-body {
+  padding: 10px 12px 12px;
+}
+.api-ds-fill-panel {
+  margin-top: 0;
+}
+.api-ds-fill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px 0;
+}
+.api-ds-fill-field {
+  width: 240px;
+}
+.api-ds-fill-target {
+  width: 110px;
+}
+.api-ds-fill-name {
+  width: 200px;
+}
+.api-ds-fill-panel .api-ds-hint--inpanel {
+  padding: 0 12px 10px;
+}
+.api-ds-body-input >>> textarea {
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+</style>
+
+<style>
+.api-ds-form-dialog .el-dialog__body {
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+  padding-top: 10px;
+}
+.api-test-result-msgbox {
+  width: 720px;
+}
+.api-test-result-msg {
+  text-align: left;
+  color: #606266;
+  font-size: 13px;
+}
+.api-test-result-msg .is-ok {
+  color: #67c23a;
+  font-weight: 600;
+}
+.api-test-result-msg .is-fail {
+  color: #f56c6c;
+  font-weight: 600;
+}
+.api-test-result-msg__pre {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  max-height: 420px;
+  overflow: auto;
+  background: #f5f7fa;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

@@ -59,8 +59,9 @@
         <template slot-scope="scope">{{ lastExecLabel(scope.row.lastExecuteStatus) }}</template>
       </el-table-column>
       <el-table-column label="xxlJobId" align="center" prop="xxlJobId" width="100" />
-      <el-table-column label="操作" align="center" width="320" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="380" class-name="small-padding fixed-width">
         <template slot-scope="scope">
+          <el-button size="mini" type="text" icon="el-icon-view" @click="handleView(scope.row)" v-hasPermi="['datasource:job:query']">详情</el-button>
           <el-button size="mini" type="text" icon="el-icon-video-play" @click="handleStart(scope.row)" v-hasPermi="['datasource:job:changeStatus']" v-if="scope.row.jobStatus !== 1">开启</el-button>
           <el-button size="mini" type="text" icon="el-icon-video-pause" @click="handleStop(scope.row)" v-hasPermi="['datasource:job:changeStatus']" v-if="scope.row.jobStatus === 1">停用</el-button>
           <el-button size="mini" type="text" icon="el-icon-caret-right" @click="handleExecute(scope.row)" v-hasPermi="['datasource:job:execute']">执行</el-button>
@@ -73,11 +74,35 @@
 
     <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
 
-    <el-dialog :title="title" :visible.sync="open" width="1100px" append-to-body>
+    <el-dialog :title="title" :visible.sync="open" width="1100px" append-to-body custom-class="job-form-dialog">
       <el-form ref="form" :model="form" :rules="rules" label-width="110px" size="small">
         <el-form-item label="作业名称" prop="jobName">
           <el-input v-model="form.jobName" placeholder="请输入作业名称" />
         </el-form-item>
+
+        <el-divider content-position="left">调度配置</el-divider>
+        <el-form-item label="同步方式" prop="syncType">
+          <el-radio-group v-model="form.syncType">
+            <el-radio :label="0">全量</el-radio>
+            <el-radio :label="1">增量</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="触发方式" prop="triggerType">
+          <el-radio-group v-model="form.triggerType" @change="onTriggerChange">
+            <el-radio :label="0">手动</el-radio>
+            <el-radio :label="1">定时</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="Cron" prop="cron" v-if="form.triggerType === 1">
+          <xxl-cron-gen v-model="form.cron" />
+        </el-form-item>
+        <el-form-item label="生效时间">
+          <el-date-picker v-model="effectiveRange" type="datetimerange" value-format="yyyy-MM-dd HH:mm:ss" range-separator="至" start-placeholder="开始" end-placeholder="结束" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="备注" prop="remark">
+          <el-input v-model="form.remark" type="textarea" :rows="2" />
+        </el-form-item>
+
         <el-divider content-position="left">源配置</el-divider>
         <el-form-item label="数据源类型" prop="datasourceType">
           <el-select v-model="form.datasourceType" placeholder="请先选择数据源类型" style="width: 100%" @change="onDatasourceTypeChange">
@@ -115,6 +140,7 @@
             <el-option v-for="t in sourceTableOptions" :key="t" :label="t" :value="t" />
           </el-select>
         </el-form-item>
+
         <el-divider content-position="left">目标配置</el-divider>
         <el-form-item label="目标数据源" prop="targetDatasourceId">
           <el-select
@@ -153,98 +179,133 @@
             >同源表名</el-button>
           </div>
         </el-form-item>
-        <el-form-item label="字段映射" prop="fieldMappings">
-          <div style="width: 100%">
-            <el-button type="text" icon="el-icon-plus" @click="addMappingRow">添加映射</el-button>
-            <el-button type="text" icon="el-icon-magic-stick" :disabled="!canAutoMap" @click="autoMapFields">同名自动映射</el-button>
-            <el-button type="text" icon="el-icon-copy-document" :disabled="!sourceFieldOptions.length" @click="mapBySourceFieldNames">同源字段名</el-button>
-            <el-button type="text" icon="el-icon-delete" :disabled="!(form.fieldMappings && form.fieldMappings.length)" @click="clearFieldMappings">一键清空</el-button>
-            <div style="color: #909399; font-size: 12px; margin: 0 0 6px;">
-              可拖拽「拖拽」列调整顺序（即建表字段顺序）；类型空时 API 默认 varchar(255)、JDBC 沿用源类型；注释空则沿用源注释。改成可能不兼容的类型会提示。
+
+        <el-divider content-position="left">字段映射</el-divider>
+        <el-form-item prop="fieldMappings" label-width="0" class="job-mapping-form-item">
+          <div class="job-mapping-panel">
+            <div class="job-mapping-toolbar">
+              <div class="job-mapping-actions">
+                <el-button type="text" icon="el-icon-plus" @click="addMappingRow">添加映射</el-button>
+                <el-button type="text" icon="el-icon-magic-stick" :disabled="!canAutoMap" @click="autoMapFields">同名自动映射</el-button>
+                <el-button type="text" icon="el-icon-copy-document" :disabled="!sourceFieldOptions.length" @click="mapBySourceFieldNames">同源字段名</el-button>
+                <el-button type="text" icon="el-icon-delete" :disabled="!(form.fieldMappings && form.fieldMappings.length)" @click="clearFieldMappings">一键清空</el-button>
+                <span class="job-mapping-count">已配置 {{ fieldMappingCount }} 个字段映射</span>
+              </div>
+              <div class="job-mapping-hint">
+                可拖拽调整建表字段顺序；勾选主键可多列组成复合主键；类型空时 API 按样例推断、JDBC 沿用源类型；注释空则沿用源注释。
+              </div>
             </div>
-            <el-table ref="mappingTable" :data="form.fieldMappings" size="mini" border empty-text="请添加字段映射" row-key="_rowKey">
-              <el-table-column label="拖拽" width="56" align="center">
-                <template slot-scope="scope">
-                  <i class="el-icon-rank mapping-drag-handle" title="拖拽调整顺序" />
-                </template>
-              </el-table-column>
-              <el-table-column label="源字段" min-width="150">
-                <template slot-scope="scope">
-                  <el-select
-                    v-model="scope.row.sourceField"
-                    filterable
-                    clearable
-                    placeholder="源字段"
-                    style="width: 100%"
-                    @change="onSourceFieldPicked(scope.row)"
-                  >
-                    <el-option v-for="f in sourceFieldOptions" :key="'s-' + f" :label="f" :value="f" />
-                  </el-select>
-                </template>
-              </el-table-column>
-              <el-table-column label="目标字段" min-width="130">
-                <template slot-scope="scope">
-                  <el-autocomplete
-                    v-model="scope.row.targetField"
-                    :fetch-suggestions="(q, cb) => queryTargetFieldSuggestions(q, cb, scope.row)"
-                    clearable
-                    placeholder="目标字段名"
-                    style="width: 100%"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column label="目标类型" min-width="140">
-                <template slot-scope="scope">
-                  <el-autocomplete
-                    v-model="scope.row.targetType"
-                    :fetch-suggestions="queryTypeSuggestions"
-                    clearable
-                    :placeholder="isApiSource ? '默认varchar(255)' : '默认沿用源类型'"
-                    style="width: 100%"
-                    @change="onTargetTypeChange(scope.row)"
-                    @select="() => onTargetTypeChange(scope.row)"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column label="字段注释" min-width="140">
-                <template slot-scope="scope">
-                  <el-input v-model="scope.row.targetComment" clearable :placeholder="isApiSource ? '可选' : '默认沿用源注释'" />
-                </template>
-              </el-table-column>
-              <el-table-column width="50" align="center">
-                <template slot-scope="scope">
-                  <el-button type="text" icon="el-icon-delete" @click="form.fieldMappings.splice(scope.$index, 1)" />
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="job-mapping-table-wrap">
+              <el-table ref="mappingTable" :data="form.fieldMappings" size="mini" border empty-text="请添加字段映射" row-key="_rowKey" max-height="360">
+                <el-table-column label="拖拽" width="56" align="center">
+                  <template slot-scope="scope">
+                    <i class="el-icon-rank mapping-drag-handle" title="拖拽调整顺序" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="源字段" min-width="150">
+                  <template slot-scope="scope">
+                    <el-select
+                      v-model="scope.row.sourceField"
+                      filterable
+                      clearable
+                      placeholder="源字段"
+                      style="width: 100%"
+                      @change="onSourceFieldPicked(scope.row)"
+                    >
+                      <el-option v-for="f in sourceFieldOptions" :key="'s-' + f" :label="f" :value="f" />
+                    </el-select>
+                  </template>
+                </el-table-column>
+                <el-table-column label="目标字段" min-width="130">
+                  <template slot-scope="scope">
+                    <el-autocomplete
+                      v-model="scope.row.targetField"
+                      :fetch-suggestions="(q, cb) => queryTargetFieldSuggestions(q, cb, scope.row)"
+                      clearable
+                      placeholder="目标字段名"
+                      style="width: 100%"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="目标类型" min-width="140">
+                  <template slot-scope="scope">
+                    <el-autocomplete
+                      v-model="scope.row.targetType"
+                      :fetch-suggestions="queryTypeSuggestions"
+                      clearable
+                      :placeholder="isApiSource ? '默认按样例推断' : '默认沿用源类型'"
+                      style="width: 100%"
+                      @change="onTargetTypeChange(scope.row)"
+                      @select="() => onTargetTypeChange(scope.row)"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="字段注释" min-width="140">
+                  <template slot-scope="scope">
+                    <el-input v-model="scope.row.targetComment" clearable :placeholder="isApiSource ? '可选' : '默认沿用源注释'" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="主键" width="70" align="center">
+                  <template slot-scope="scope">
+                    <el-switch v-model="scope.row.primaryKey" />
+                  </template>
+                </el-table-column>
+                <el-table-column width="50" align="center">
+                  <template slot-scope="scope">
+                    <el-button type="text" icon="el-icon-delete" @click="form.fieldMappings.splice(scope.$index, 1)" />
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
-        </el-form-item>
-        <el-divider content-position="left">调度配置</el-divider>
-        <el-form-item label="同步方式" prop="syncType">
-          <el-radio-group v-model="form.syncType">
-            <el-radio :label="0">全量</el-radio>
-            <el-radio :label="1">增量</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="触发方式" prop="triggerType">
-          <el-radio-group v-model="form.triggerType" @change="onTriggerChange">
-            <el-radio :label="0">手动</el-radio>
-            <el-radio :label="1">定时</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="Cron" prop="cron" v-if="form.triggerType === 1">
-          <xxl-cron-gen v-model="form.cron" />
-        </el-form-item>
-        <el-form-item label="生效时间">
-          <el-date-picker v-model="effectiveRange" type="datetimerange" value-format="yyyy-MM-dd HH:mm:ss" range-separator="至" start-placeholder="开始" end-placeholder="结束" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="备注" prop="remark">
-          <el-input v-model="form.remark" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
         <el-button type="primary" @click="submitForm">确 定</el-button>
         <el-button @click="cancel">取 消</el-button>
+      </div>
+    </el-dialog>
+
+    <!-- 作业详情（只读） -->
+    <el-dialog title="作业详情" :visible.sync="viewOpen" width="960px" append-to-body>
+      <el-descriptions :column="2" border size="small" v-if="viewForm">
+        <el-descriptions-item label="作业名称">{{ viewForm.jobName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="作业状态">
+          <el-tag :type="jobStatusTag(viewForm.jobStatus)" size="mini">{{ jobStatusLabel(viewForm.jobStatus) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="源类型">{{ viewForm.datasourceType || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="源数据源">{{ viewForm.datasourceName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="源表">{{ viewForm.sourceTable || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="目标数据源">{{ viewForm.targetDatasourceName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="目标表" :span="2">{{ viewForm.targetTable || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="同步方式">{{ viewForm.syncType === 1 ? '增量' : '全量' }}</el-descriptions-item>
+        <el-descriptions-item label="触发方式">{{ viewForm.triggerType === 1 ? '定时' : '手动' }}</el-descriptions-item>
+        <el-descriptions-item label="Cron" :span="2">{{ viewForm.cron || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="生效开始">{{ parseTime(viewForm.effectiveTimeBegin) || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="生效结束">{{ parseTime(viewForm.effectiveTimeEnd) || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="最近执行">{{ lastExecLabel(viewForm.lastExecuteStatus) }}</el-descriptions-item>
+        <el-descriptions-item label="最近执行时间">{{ parseTime(viewForm.lastExecuteTime) || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="xxlJobId">{{ viewForm.xxlJobId || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="作业ID">{{ viewForm.id || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ viewForm.remark || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <div v-if="viewForm" style="margin-top: 14px;">
+        <div style="font-weight: 600; margin-bottom: 8px;">字段映射</div>
+        <el-table :data="viewForm.fieldMappings || []" size="mini" border empty-text="无映射">
+          <el-table-column type="index" label="#" width="50" align="center" />
+          <el-table-column label="源字段" prop="sourceField" min-width="160" show-overflow-tooltip />
+          <el-table-column label="目标字段" prop="targetField" min-width="120" show-overflow-tooltip />
+          <el-table-column label="目标类型" prop="targetType" min-width="110" show-overflow-tooltip />
+          <el-table-column label="字段注释" prop="targetComment" min-width="140" show-overflow-tooltip />
+          <el-table-column label="主键" width="70" align="center">
+            <template slot-scope="scope">
+              <el-tag :type="scope.row.primaryKey ? 'success' : 'info'" size="mini">{{ scope.row.primaryKey ? '是' : '否' }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="viewOpen = false">关 闭</el-button>
       </div>
     </el-dialog>
   </div>
@@ -277,6 +338,8 @@ export default {
       multiple: true,
       open: false,
       title: '',
+      viewOpen: false,
+      viewForm: null,
       // 修改回显加载中：忽略 select 的 change，避免清空已回显值并重复打列接口报错
       formHydrating: false,
       /** 已提交生效的目标表名（用于判断是否真切换了表） */
@@ -332,6 +395,10 @@ export default {
     canAutoMap() {
       // 有源字段即可：目标有列则做交集；无列则按源字段同名生成
       return this.sourceFieldOptions.length > 0
+    },
+    /** 工具栏展示：当前映射行数 */
+    fieldMappingCount() {
+      return (this.form && this.form.fieldMappings) ? this.form.fieldMappings.length : 0
     },
     /**
      * 目标字段候选：库表已有列 + 当前映射已填值
@@ -608,7 +675,9 @@ export default {
           names.push(c.name)
           metaMap[c.name] = {
             type: this.normalizeColumnType(c.type),
-            comment: c.comment || ''
+            comment: c.comment || '',
+            // ColumnInfo 字段名为 primarykey
+            primaryKey: !!(c.primarykey || c.primaryKey)
           }
           metaMap[String(c.name).toLowerCase()] = metaMap[c.name]
         })
@@ -637,8 +706,22 @@ export default {
     },
     loadApiSourceFields(datasourceId) {
       return listApiOutputFields(datasourceId).then(res => {
-        this.sourceFieldMetaMap = {}
-        this.sourceFieldOptions = (res.data || []).map(f => f.fieldName).filter(Boolean)
+        const metaMap = {}
+        const raw = []
+        ;(res.data || []).forEach(f => {
+          if (!f || !f.fieldName) return
+          raw.push(f.fieldName)
+          const inferred = f.inferredType || this.inferSqlTypeFromSample(f.sampleValue)
+          metaMap[f.fieldName] = { type: inferred || 'varchar(255)', comment: '', primaryKey: false }
+          metaMap[String(f.fieldName).toLowerCase()] = metaMap[f.fieldName]
+          const leaf = this.toLeafFieldName(f.fieldName)
+          if (leaf && !metaMap[leaf]) {
+            metaMap[leaf] = metaMap[f.fieldName]
+          }
+        })
+        this.sourceFieldMetaMap = metaMap
+        // API 源字段只用 JSON 路径（如 data.id）；去掉被路径覆盖的末段重复项
+        this.sourceFieldOptions = this.dedupeApiSourceFields(raw)
         return this.sourceFieldOptions
       }).catch(() => {
         this.sourceFieldOptions = []
@@ -647,28 +730,69 @@ export default {
         return []
       })
     },
+    /** 前端兜底：根据样例字符串粗推断 SQL 类型 */
+    inferSqlTypeFromSample(sample) {
+      const varcharByLen = (text) => {
+        const len = String(text || '').trim().length
+        if (len <= 64) return 'varchar(128)'
+        if (len <= 255) return 'varchar(255)'
+        if (len <= 512) return 'varchar(512)'
+        if (len <= 2000) return 'varchar(2000)'
+        return 'text'
+      }
+      if (sample === null || sample === undefined || sample === '') return 'varchar(255)'
+      if (typeof sample === 'boolean') return 'tinyint(1)'
+      if (typeof sample === 'number') {
+        if (!Number.isFinite(sample)) return 'varchar(255)'
+        // 小数用 varchar，避免精度丢失
+        if (!Number.isInteger(sample)) return varcharByLen(sample)
+        return (sample > 2147483647 || sample < -2147483648) ? 'bigint' : 'int'
+      }
+      const s = String(sample).trim()
+      if (!s) return 'varchar(255)'
+      if (/^(true|false)$/i.test(s)) return 'tinyint(1)'
+      if (/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}:\d{2}(\.\d+)?)?$/.test(s)) return 'datetime'
+      if (/^-?\d+$/.test(s)) return s.length > 10 ? 'bigint' : 'int'
+      if (/^-?\d+\.\d+([eE][+-]?\d+)?$/.test(s)) return varcharByLen(s)
+      return varcharByLen(s)
+    },
+    /** 保留 data.id，丢弃多余的 id */
+    dedupeApiSourceFields(fields) {
+      const list = (fields || []).map(f => String(f)).filter(Boolean)
+      const set = new Set(list)
+      return list.filter(key => {
+        if (key.indexOf('.') >= 0) return true
+        for (const other of set) {
+          if (other !== key && other.endsWith('.' + key)) {
+            return false
+          }
+        }
+        return true
+      })
+    },
     normalizeColumnType(type) {
       if (!type) return ''
       return String(type).trim().toLowerCase().replace(/\s+/g, '')
     },
     getSourceMeta(sourceField) {
-      if (!sourceField) return { type: '', comment: '' }
+      if (!sourceField) return { type: '', comment: '', primaryKey: false }
       const map = this.sourceFieldMetaMap || {}
-      return map[sourceField] || map[String(sourceField).toLowerCase()] || map[this.toLeafFieldName(sourceField)] || { type: '', comment: '' }
+      return map[sourceField] || map[String(sourceField).toLowerCase()] || map[this.toLeafFieldName(sourceField)] || { type: '', comment: '', primaryKey: false }
     },
-    /** 构造一行映射，带上类型/注释默认值 */
+    /** 构造一行映射，带上类型/注释/主键默认值 */
     buildMappingRow(sourceField, targetField) {
       const meta = this.getSourceMeta(sourceField)
       const row = {
         sourceField: sourceField || '',
         targetField: targetField != null ? targetField : this.toLeafFieldName(sourceField),
         targetType: '',
-        targetComment: ''
+        targetComment: '',
+        primaryKey: !!meta.primaryKey
       }
       if (this.isApiSource) {
-        // API：不填类型时后端默认字符串；表单预填便于看见默认值
-        row.targetType = 'varchar(255)'
-        row.targetComment = ''
+        // API：按接口样例值推断类型，缺省再回落 varchar(255)
+        row.targetType = meta.type || 'varchar(255)'
+        row.targetComment = meta.comment || ''
       } else {
         row.targetType = meta.type || ''
         row.targetComment = meta.comment || ''
@@ -683,11 +807,13 @@ export default {
         row.targetField = this.toLeafFieldName(row.sourceField)
       }
       if (!row.targetType) {
-        row.targetType = this.isApiSource ? 'varchar(255)' : (meta.type || '')
+        row.targetType = this.isApiSource ? (meta.type || 'varchar(255)') : (meta.type || '')
       }
       if (!row.targetComment) {
         row.targetComment = meta.comment || ''
       }
+      // 切换源字段时同步默认主键标记（用户之后仍可手动改）
+      this.$set(row, 'primaryKey', !!meta.primaryKey)
     },
     queryTypeSuggestions(queryString, cb) {
       const q = (queryString || '').toLowerCase()
@@ -730,15 +856,22 @@ export default {
         this.$modal.msgWarning('请先加载源字段')
         return
       }
-      // 目标表已有列：按同名（忽略大小写）做交集；否则按源字段名整表生成（新建表）
+      // 目标表已有列：按末段同名匹配（data.id ↔ id）；优先用更长的 JSON 路径作源字段
       if (this.targetFieldOptions.length) {
-        const sourceSet = new Set(this.sourceFieldOptions.map(f => f.toLowerCase()))
         const mapped = []
+        const usedSource = new Set()
         this.targetFieldOptions.forEach(tf => {
-          if (sourceSet.has(tf.toLowerCase())) {
-            const sf = this.sourceFieldOptions.find(s => s.toLowerCase() === tf.toLowerCase())
-            mapped.push(this.buildMappingRow(sf, tf))
-          }
+          const tfLower = String(tf).toLowerCase()
+          const candidates = this.sourceFieldOptions.filter(s => {
+            const sl = String(s).toLowerCase()
+            return sl === tfLower || this.toLeafFieldName(s).toLowerCase() === tfLower
+          })
+          if (!candidates.length) return
+          candidates.sort((a, b) => String(b).length - String(a).length)
+          const sf = candidates[0]
+          if (usedSource.has(sf)) return
+          usedSource.add(sf)
+          mapped.push(this.buildMappingRow(sf, tf))
         })
         this.form.fieldMappings = mapped
         if (!mapped.length) {
@@ -749,13 +882,16 @@ export default {
       }
       this.mapBySourceFieldNames()
     },
-    /** 目标字段按源字段生成：带路径时默认取末段（data.chiefNo → chiefNo） */
+    /** 目标字段按源字段生成：源用 JSON 路径 data.id，目标列默认取末段 id */
     mapBySourceFieldNames() {
       if (!this.sourceFieldOptions.length) {
         this.$modal.msgWarning('请先加载源字段')
         return
       }
-      this.form.fieldMappings = this.sourceFieldOptions.map(sf => this.buildMappingRow(sf, this.toLeafFieldName(sf)))
+      const sources = this.isApiSource
+        ? this.dedupeApiSourceFields(this.sourceFieldOptions)
+        : this.sourceFieldOptions
+      this.form.fieldMappings = sources.map(sf => this.buildMappingRow(sf, this.toLeafFieldName(sf)))
       this.$nextTick(() => this.initMappingSortable())
     },
     /** API 嵌套字段取最后一段作为默认目标列名 */
@@ -847,6 +983,24 @@ export default {
       this.open = true
       this.title = '新增作业'
     },
+    /** 查看作业详情（只读，含字段映射） */
+    handleView(row) {
+      const id = row && row.id != null ? String(row.id) : ''
+      if (!id) {
+        this.$modal.msgWarning('作业ID无效')
+        return
+      }
+      getJob(id).then(res => {
+        const data = Object.assign({}, res.data || {})
+        if (data.id != null) data.id = String(data.id)
+        if (data.datasourceId != null) data.datasourceId = String(data.datasourceId)
+        if (data.targetDatasourceId != null) data.targetDatasourceId = String(data.targetDatasourceId)
+        if (data.xxlJobId != null) data.xxlJobId = String(data.xxlJobId)
+        data.fieldMappings = data.fieldMappings || []
+        this.viewForm = data
+        this.viewOpen = true
+      })
+    },
     handleUpdate(row) {
       this.reset()
       const id = row && row.id != null ? String(row.id) : String(this.ids[0])
@@ -886,14 +1040,19 @@ export default {
         Promise.all([sourceReady, targetReady]).then(() => {
           // 兼容旧数据：补齐类型/注释字段
           const filled = (mappings || []).map(m => {
-            const row = Object.assign({ targetType: '', targetComment: '' }, m)
+            const row = Object.assign({ targetType: '', targetComment: '', primaryKey: false }, m)
+            const meta = this.getSourceMeta(row.sourceField)
             if (!row.targetType) {
-              const meta = this.getSourceMeta(row.sourceField)
-              row.targetType = this.isApiSource ? 'varchar(255)' : (meta.type || '')
+              row.targetType = this.isApiSource ? (meta.type || 'varchar(255)') : (meta.type || '')
             }
             if (!row.targetComment) {
-              const meta = this.getSourceMeta(row.sourceField)
               row.targetComment = meta.comment || ''
+            }
+            // 旧数据无 primaryKey：JDBC 回填源主键；已保存的以配置为准
+            if (m.primaryKey === undefined || m.primaryKey === null) {
+              row.primaryKey = !!meta.primaryKey
+            } else {
+              row.primaryKey = !!m.primaryKey
             }
             return this.ensureMappingRowKey(row)
           })
@@ -926,7 +1085,8 @@ export default {
             sourceField: i.sourceField,
             targetField: i.targetField,
             targetType: i.targetType || undefined,
-            targetComment: i.targetComment || undefined
+            targetComment: i.targetComment || undefined,
+            primaryKey: !!i.primaryKey
             // _rowKey 仅前端拖拽用，不提交
           }))
         if (!mappings.length) {
@@ -989,6 +1149,51 @@ export default {
 .mapping-drag-handle:hover {
   color: #409EFF;
 }
+.job-mapping-form-item {
+  margin-bottom: 8px;
+}
+.job-mapping-form-item >>> .el-form-item__content {
+  margin-left: 0 !important;
+}
+.job-mapping-panel {
+  width: 100%;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  background: #fafbfc;
+  overflow: hidden;
+}
+.job-mapping-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #ebeef5;
+  background: #fff;
+}
+.job-mapping-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+}
+.job-mapping-count {
+  margin-left: 8px;
+  color: #606266;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.job-mapping-hint {
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.job-mapping-table-wrap {
+  padding: 10px 12px 12px;
+  background: #fff;
+}
 </style>
 
 <style>
@@ -996,5 +1201,10 @@ export default {
 .mapping-row-ghost {
   opacity: 0.6;
   background: #f5f7fa !important;
+}
+.job-form-dialog .el-dialog__body {
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+  padding-top: 12px;
 }
 </style>

@@ -1,5 +1,6 @@
 package com.winter.cloud.xxljob.api;
 
+import com.winter.cloud.common.core.constant.SecurityConstants;
 import com.winter.cloud.common.core.constant.ServiceNameConstants;
 import com.winter.cloud.common.core.web.domain.AjaxResult;
 import com.winter.cloud.common.core.web.page.TableDataInfo;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
@@ -57,4 +59,11 @@ public interface RemoteXxlJobLogService {
      */
     @PostMapping("/joblog/kill/{id}")
     AjaxResult kill(@PathVariable("id") int id);
+
+    /**
+     * 内部终止任务（数据源作业日志等服务间调用）
+     */
+    @PostMapping("/inner/joblog/kill/{id}")
+    AjaxResult killInner(@PathVariable("id") int id,
+                         @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
 }

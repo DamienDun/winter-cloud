@@ -13,4 +13,12 @@ public class DsApiFieldItem {
     /** dotted path, e.g. access_token / data.token */
     private String fieldName;
     private String sampleValue;
+    /** 根据样例值推断的目标 SQL 类型，如 bigint / varchar(255) */
+    private String inferredType;
+
+    public DsApiFieldItem(String fieldName, String sampleValue) {
+        this.fieldName = fieldName;
+        this.sampleValue = sampleValue;
+        this.inferredType = null;
+    }
 }

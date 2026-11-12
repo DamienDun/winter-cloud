@@ -13,6 +13,9 @@ import com.winter.cloud.datasource.domain.dto.DsApiTestResult;
 import com.winter.cloud.datasource.domain.entity.DsApiDatasource;
 import com.winter.cloud.datasource.mapper.DsApiDatasourceMapper;
 import com.winter.cloud.datasource.service.IDsApiDatasourceService;
+import com.winter.cloud.datasource.support.DsJobCancelRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,6 +41,8 @@ import java.util.stream.Collectors;
 @Service
 public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
 
+    private static final Logger log = LoggerFactory.getLogger(DsApiDatasourceServiceImpl.class);
+
     private static final int REQ_POST = 0;
     private static final int REQ_GET = 1;
     private static final int AVAILABLE = 0;
@@ -44,6 +50,9 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
 
     @Autowired
     private DsApiDatasourceMapper apiDatasourceMapper;
+
+    @Autowired
+    private DsJobCancelRegistry jobCancelRegistry;
 
     @Override
     public List<DsApiDatasource> selectList(DsApiDatasource query) {
@@ -95,36 +104,322 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         if (ds == null) {
             throw new IllegalArgumentException("datasource not found");
         }
-        DsApiTestResult test = doHttpRequest(ds, null);
-        if (test.getTestStatus() == null || test.getTestStatus() != 0) {
-            throw new IllegalStateException("rely api test failed: " + test.getTestResult());
-        }
-        Object parsed = parseByDataItemKey(ds.getDataItemKey(), test.getTestResult());
-        Map<String, String> flat = new LinkedHashMap<>();
-        flattenFields("", parsed, flat, 0);
-        List<DsApiFieldItem> list = new ArrayList<>();
-        for (Map.Entry<String, String> e : flat.entrySet()) {
-            list.add(new DsApiFieldItem(e.getKey(), e.getValue()));
-        }
-        return list;
-    }
-
-    @Override
-    public List<Map<String, Object>> fetchDataRows(Long id) {
-        DsApiDatasource ds = selectById(id);
-        if (ds == null) {
-            throw new IllegalArgumentException("datasource not found");
-        }
+        // 与同步取数一致：先解析依赖 token，再调业务接口
         Map<String, String> relyValues = resolveRelyValues(ds.getRelyDatasourceId());
-        DsApiTestResult test = doHttpRequest(ds, relyValues);
+        DsApiTestResult test = doHttpRequest(ds, relyValues, null, isPageApi(ds));
         if (test.getTestStatus() == null || test.getTestStatus() != 0) {
             throw new IllegalStateException("api call failed: " + test.getTestResult());
         }
         Object root = parseRootJson(test.getTestResult());
+        // 始终从根按 JSON 路径展平（数组只取第一条），得到 data.id 这种唯一路径；值保留原始类型用于推断
+        Map<String, Object> flat = new LinkedHashMap<>();
+        flattenJsonKeys("", root, flat, 0);
+
+        String scopePrefix = normalizeDataItemKeyPrefix(ds.getDataItemKey());
+        if (StringUtils.isEmpty(scopePrefix)) {
+            // 未配 dataItemKey 时，自动落到业务列表路径（如 data / data.list）
+            Object parsed = parseByDataItemKey(null, test.getTestResult());
+            RowExtract extract = extractRowItems(root, parsed, null);
+            if (extract != null && StringUtils.isNotEmpty(extract.prefix)) {
+                scopePrefix = extract.prefix;
+            }
+        }
+        if (StringUtils.isNotEmpty(scopePrefix)) {
+            final String prefix = scopePrefix;
+            flat.entrySet().removeIf(e -> {
+                String k = e.getKey();
+                return k == null || !(k.equals(prefix) || k.startsWith(prefix + "."));
+            });
+        }
+        // 去掉被完整路径覆盖的末段重复项（保留 data.id，去掉多余的 id）
+        removeShadowedLeafKeys(flat);
+
+        List<DsApiFieldItem> list = new ArrayList<>();
+        for (Map.Entry<String, Object> e : flat.entrySet()) {
+            Object sample = e.getValue();
+            String sampleText = sample == null ? "" : String.valueOf(sample);
+            list.add(new DsApiFieldItem(e.getKey(), sampleText, inferApiSqlType(sample)));
+        }
+        log.info("listOutputFields id={} fieldCount={} scopePrefix={}", id, list.size(), scopePrefix);
+        return list;
+    }
+
+    /**
+     * 若同时存在 id 与 data.id，只保留带路径的 data.id，避免作业映射出现多余末段字段。
+     */
+    private void removeShadowedLeafKeys(Map<String, ?> flat) {
+        if (flat == null || flat.isEmpty()) {
+            return;
+        }
+        List<String> keys = new ArrayList<>(flat.keySet());
+        for (String key : keys) {
+            if (key == null || key.contains(".")) {
+                continue;
+            }
+            boolean shadowed = false;
+            for (String other : keys) {
+                if (other != null && other.endsWith("." + key)) {
+                    shadowed = true;
+                    break;
+                }
+            }
+            if (shadowed) {
+                flat.remove(key);
+            }
+        }
+    }
+
+    /**
+     * 按 JSON 结构展平字段 key（点路径，不重复）。
+     * 遇到数组只取第一条元素继续解析，不展开全部下标；叶子值保留原始类型。
+     */
+    private void flattenJsonKeys(String prefix, Object node, Map<String, Object> out, int depth) {
+        if (node == null || depth > 8) {
+            return;
+        }
+        if (node instanceof JSONArray) {
+            JSONArray arr = (JSONArray) node;
+            if (arr.isEmpty()) {
+                return;
+            }
+            // 数组类型：只拿第一条解析里面的 key
+            flattenJsonKeys(prefix, arr.get(0), out, depth + 1);
+            return;
+        }
+        if (node instanceof JSONObject) {
+            JSONObject obj = (JSONObject) node;
+            for (String key : obj.keySet()) {
+                if (StringUtils.isEmpty(key)) {
+                    continue;
+                }
+                Object val = obj.get(key);
+                String path = StringUtils.isEmpty(prefix) ? key : prefix + "." + key;
+                if (val instanceof JSONObject || val instanceof JSONArray) {
+                    flattenJsonKeys(path, val, out, depth + 1);
+                } else {
+                    out.putIfAbsent(path, val);
+                }
+            }
+            return;
+        }
+        if (node instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) node;
+            for (Map.Entry<String, Object> e : map.entrySet()) {
+                if (StringUtils.isEmpty(e.getKey())) {
+                    continue;
+                }
+                Object val = e.getValue();
+                String path = StringUtils.isEmpty(prefix) ? e.getKey() : prefix + "." + e.getKey();
+                if (val instanceof JSONObject || val instanceof JSONArray || val instanceof Map || val instanceof List) {
+                    flattenJsonKeys(path, val, out, depth + 1);
+                } else {
+                    out.putIfAbsent(path, val);
+                }
+            }
+            return;
+        }
+        if (node instanceof List) {
+            List<?> list = (List<?>) node;
+            if (!list.isEmpty()) {
+                flattenJsonKeys(prefix, list.get(0), out, depth + 1);
+            }
+            return;
+        }
+        if (StringUtils.isNotEmpty(prefix)) {
+            out.putIfAbsent(prefix, node);
+        }
+    }
+
+    /** 根据接口样例值推断目标列 SQL 类型 */
+    private String inferApiSqlType(Object value) {
+        if (value == null) {
+            return "varchar(255)";
+        }
+        if (value instanceof Boolean) {
+            return "tinyint(1)";
+        }
+        if (value instanceof Byte || value instanceof Short || value instanceof Integer) {
+            return "int";
+        }
+        if (value instanceof Long) {
+            return "bigint";
+        }
+        // 小数一律 varchar，避免 decimal/浮点入库丢精度
+        if (value instanceof Float || value instanceof Double || value instanceof java.math.BigDecimal) {
+            return varcharByLength(String.valueOf(value));
+        }
+        if (value instanceof java.util.Date || value instanceof java.sql.Timestamp || value instanceof java.sql.Date
+                || value instanceof java.time.LocalDateTime || value instanceof java.time.LocalDate) {
+            return "datetime";
+        }
+        if (value instanceof Number) {
+            // Fastjson 等可能给出其它 Number 实现
+            String n = String.valueOf(value);
+            if (n.contains(".") || n.contains("e") || n.contains("E")) {
+                return varcharByLength(n);
+            }
+            try {
+                long lv = ((Number) value).longValue();
+                if (lv > Integer.MAX_VALUE || lv < Integer.MIN_VALUE) {
+                    return "bigint";
+                }
+                return "int";
+            } catch (Exception ignore) {
+                return "bigint";
+            }
+        }
+        String s = String.valueOf(value).trim();
+        if (s.isEmpty()) {
+            return "varchar(255)";
+        }
+        if ("true".equalsIgnoreCase(s) || "false".equalsIgnoreCase(s)) {
+            return "tinyint(1)";
+        }
+        if (s.matches("^\\d{4}-\\d{2}-\\d{2}([ T]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?)?$")) {
+            return "datetime";
+        }
+        if (s.matches("^-?\\d+$")) {
+            if (s.length() > 10) {
+                return "bigint";
+            }
+            return "int";
+        }
+        // 小数文本也走 varchar，避免精度丢失
+        if (s.matches("^-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?$") && s.indexOf('.') >= 0) {
+            return varcharByLength(s);
+        }
+        return varcharByLength(s);
+    }
+
+    private String varcharByLength(String s) {
+        int len = s == null ? 0 : s.trim().length();
+        if (len <= 64) {
+            return "varchar(128)";
+        }
+        if (len <= 255) {
+            return "varchar(255)";
+        }
+        if (len <= 512) {
+            return "varchar(512)";
+        }
+        if (len <= 2000) {
+            return "varchar(2000)";
+        }
+        return "text";
+    }
+
+    /** 自动翻页上限，防止分页参数无效时死循环 */
+    private static final int MAX_API_PAGES = 500;
+    /** 测试连接时分页接口强制的 pageSize，避免一次返回过多导致页面卡顿 */
+    private static final int TEST_PAGE_SIZE = 2;
+    private static final String[] PAGE_NUM_KEYS = {"pagenum", "pageno", "page", "current", "currentpage"};
+    private static final String[] PAGE_SIZE_KEYS = {"pagesize", "limit", "size"};
+
+    @Override
+    public List<Map<String, Object>> fetchDataRows(Long id) {
+        // 兼容旧调用：仍可能全量累加；作业同步请走 forEachDataPage
+        List<Map<String, Object>> all = new ArrayList<>();
+        forEachDataPage(id, (pageNum, rows) -> {
+            if (rows != null && !rows.isEmpty()) {
+                all.addAll(rows);
+            }
+        });
+        return all;
+    }
+
+    @Override
+    public int forEachDataPage(Long id, ApiPageConsumer pageConsumer) {
+        if (pageConsumer == null) {
+            throw new IllegalArgumentException("pageConsumer required");
+        }
+        DsApiDatasource ds = selectById(id);
+        if (ds == null) {
+            throw new IllegalArgumentException("datasource not found");
+        }
+        fillReqParams(ds);
+        Map<String, String> relyValues = resolveRelyValues(ds.getRelyDatasourceId());
+        boolean pageApi = isPageApi(ds);
+        String pageNumKey = detectPageNumKey(ds.getReqParams());
+        log.info("api forEachDataPage start id={} name={} pageApi={} pageNumKey={}",
+                id, ds.getDatasourceName(), pageApi, pageNumKey);
+
+        // 非分页：只请求一次
+        if (!pageApi) {
+            jobCancelRegistry.throwIfCancelled();
+            DsApiTestResult test = doHttpRequest(ds, relyValues, null, false);
+            jobCancelRegistry.throwIfCancelled();
+            List<Map<String, Object>> rows = parseResponseToRows(ds, test);
+            try {
+                pageConsumer.accept(1, rows);
+            } catch (RuntimeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new IllegalStateException(e.getMessage(), e);
+            }
+            log.info("api forEachDataPage done(single) id={} rows={}", id, rows.size());
+            return rows.size();
+        }
+
+        // 分页：逐页回调，不在此累加
+        int total = 0;
+        int page = 1;
+        for (; page <= MAX_API_PAGES; page++) {
+            jobCancelRegistry.throwIfCancelled();
+            DsApiTestResult test = doHttpRequest(ds, relyValues, page, false);
+            jobCancelRegistry.throwIfCancelled();
+            if (test.getTestStatus() == null || test.getTestStatus() != 0) {
+                throw new IllegalStateException("api call failed at page=" + page + ": " + test.getTestResult());
+            }
+            List<Map<String, Object>> pageRows = parseResponseToRows(ds, test);
+            log.info("api forEachDataPage page={} rows={}", page, pageRows.size());
+            if (pageRows.isEmpty()) {
+                try {
+                    pageConsumer.accept(page, pageRows);
+                } catch (RuntimeException e) {
+                    throw e;
+                } catch (Exception e) {
+                    throw new IllegalStateException(e.getMessage(), e);
+                }
+                break;
+            }
+            try {
+                pageConsumer.accept(page, pageRows);
+            } catch (RuntimeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new IllegalStateException(e.getMessage(), e);
+            }
+            total += pageRows.size();
+        }
+        if (page > MAX_API_PAGES) {
+            log.warn("api forEachDataPage hit max pages={}, id={}, rows={}", MAX_API_PAGES, id, total);
+        }
+        log.info("api forEachDataPage done(paged) id={} pagesTried={} totalRows={}",
+                id, Math.min(page, MAX_API_PAGES), total);
+        return total;
+    }
+
+    private boolean isPageApi(DsApiDatasource ds) {
+        return ds != null && Integer.valueOf(1).equals(ds.getPageApi());
+    }
+
+    /**
+     * 将单次 API 响应解析为扁平行；HTTP 失败直接抛错。
+     */
+    private List<Map<String, Object>> parseResponseToRows(DsApiDatasource ds, DsApiTestResult test) {
+        if (test.getTestStatus() == null || test.getTestStatus() != 0) {
+            throw new IllegalStateException("api call failed: " + test.getTestResult());
+        }
+        String raw = test.getTestResult();
+        Object root = parseRootJson(raw);
         String dataItemKey = ds.getDataItemKey();
-        Object parsed = parseByDataItemKey(dataItemKey, test.getTestResult());
+        Object parsed = parseByDataItemKey(dataItemKey, raw);
         RowExtract extract = extractRowItems(root, parsed, dataItemKey);
         List<Map<String, Object>> rows = new ArrayList<>();
+        if (extract == null || extract.items == null || extract.items.isEmpty()) {
+            return rows;
+        }
         for (Object item : extract.items) {
             if (!(item instanceof JSONObject) && !(item instanceof Map)) {
                 continue;
@@ -132,27 +427,229 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             Map<String, Object> flat = new LinkedHashMap<>();
             flattenValueFields("", item, flat, 0);
             if (StringUtils.isNotEmpty(extract.prefix)) {
-                // 同步一份带容器前缀的 key，兼容映射里的 data.xxx
                 Map<String, Object> prefixed = new LinkedHashMap<>();
                 for (Map.Entry<String, Object> e : flat.entrySet()) {
                     prefixed.put(extract.prefix + "." + e.getKey(), e.getValue());
                 }
                 flat.putAll(prefixed);
             }
-            // 根级标量（code/msg）挂到每行，便于映射
             if (root instanceof JSONObject) {
                 JSONObject rootObj = (JSONObject) root;
                 for (String key : rootObj.keySet()) {
                     Object val = rootObj.get(key);
-                    if (!(val instanceof JSONObject) && !(val instanceof JSONArray) && !(val instanceof Map) && !(val instanceof List)) {
+                    if (!(val instanceof JSONObject) && !(val instanceof JSONArray)
+                            && !(val instanceof Map) && !(val instanceof List)) {
                         flat.putIfAbsent(key, val);
                     }
                 }
             }
             rows.add(flat);
         }
-        // 若未拆出对象数组，说明响应结构可能不是列表；仍返回（可能 0 行），由作业侧决定是否失败
         return rows;
+    }
+
+    /** 从入参/分页参数/Body 中识别页码字段名（如 pageNum） */
+    private String detectPageNumKey(DsApiReqParams reqParams) {
+        if (reqParams == null) {
+            return null;
+        }
+        String fromPage = findPageNumKeyInItems(reqParams.getPage());
+        if (fromPage != null) {
+            return fromPage;
+        }
+        String fromParams = findPageNumKeyInItems(reqParams.getParams());
+        if (fromParams != null) {
+            return fromParams;
+        }
+        return findPageNumKeyInBody(reqParams.getBody());
+    }
+
+    private String findPageNumKeyInItems(List<DsApiReqParamsItem> items) {
+        if (items == null) {
+            return null;
+        }
+        for (DsApiReqParamsItem item : items) {
+            if (item == null || StringUtils.isEmpty(item.getName())) {
+                continue;
+            }
+            if (item.getIsAvailable() != null && item.getIsAvailable() != AVAILABLE) {
+                continue;
+            }
+            String name = item.getName().trim();
+            if (isPageNumKey(name)) {
+                return name;
+            }
+        }
+        return null;
+    }
+
+    private String findPageNumKeyInBody(String body) {
+        if (StringUtils.isEmpty(body)) {
+            return null;
+        }
+        String trimmed = body.trim();
+        if (!trimmed.startsWith("{")) {
+            return null;
+        }
+        try {
+            JSONObject obj = JSON.parseObject(trimmed);
+            if (obj == null) {
+                return null;
+            }
+            for (String key : obj.keySet()) {
+                if (isPageNumKey(key)) {
+                    return key;
+                }
+            }
+        } catch (Exception ignore) {
+            // body 非 JSON 时忽略
+        }
+        return null;
+    }
+
+    private boolean isPageNumKey(String name) {
+        if (StringUtils.isEmpty(name)) {
+            return false;
+        }
+        String n = name.trim().toLowerCase(Locale.ROOT).replace("_", "");
+        for (String k : PAGE_NUM_KEYS) {
+            if (k.equals(n)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 把页码写入 page/params/body 中已存在的页码字段 */
+    private void applyPageNumber(DsApiReqParams reqParams, String pageNumKey, int pageNum) {
+        if (reqParams == null || StringUtils.isEmpty(pageNumKey)) {
+            return;
+        }
+        String val = String.valueOf(pageNum);
+        setItemValueByName(reqParams.getPage(), pageNumKey, val);
+        setItemValueByName(reqParams.getParams(), pageNumKey, val);
+        reqParams.setBody(setJsonNumberOrStringField(reqParams.getBody(), pageNumKey, pageNum));
+    }
+
+    /** 测试连接：把 pageSize/limit/size 等改为较小值（若参数或 Body 中存在该字段） */
+    private void applyPageSize(DsApiReqParams reqParams, int pageSize) {
+        if (reqParams == null) {
+            return;
+        }
+        applyPageSizeOnItems(reqParams.getPage(), pageSize);
+        applyPageSizeOnItems(reqParams.getParams(), pageSize);
+        reqParams.setBody(setJsonPageSizeFields(reqParams.getBody(), pageSize));
+    }
+
+    private void applyPageSizeOnItems(List<DsApiReqParamsItem> items, int pageSize) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        String val = String.valueOf(pageSize);
+        for (DsApiReqParamsItem item : items) {
+            if (item == null || StringUtils.isEmpty(item.getName())) {
+                continue;
+            }
+            if (isPageSizeKey(item.getName())) {
+                item.setValue(val);
+            }
+        }
+    }
+
+    private String setJsonPageSizeFields(String body, int pageSize) {
+        if (StringUtils.isEmpty(body)) {
+            return body;
+        }
+        String trimmed = body.trim();
+        if (!trimmed.startsWith("{")) {
+            return body;
+        }
+        try {
+            JSONObject obj = JSON.parseObject(trimmed);
+            if (obj == null) {
+                return body;
+            }
+            boolean changed = false;
+            for (String key : new ArrayList<>(obj.keySet())) {
+                if (isPageSizeKey(key)) {
+                    Object old = obj.get(key);
+                    if (old instanceof String) {
+                        obj.put(key, String.valueOf(pageSize));
+                    } else {
+                        obj.put(key, pageSize);
+                    }
+                    changed = true;
+                }
+            }
+            return changed ? obj.toJSONString() : body;
+        } catch (Exception e) {
+            return body;
+        }
+    }
+
+    private boolean isPageSizeKey(String name) {
+        if (StringUtils.isEmpty(name)) {
+            return false;
+        }
+        String n = name.trim().toLowerCase(Locale.ROOT).replace("_", "");
+        for (String k : PAGE_SIZE_KEYS) {
+            if (k.equals(n)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void setItemValueByName(List<DsApiReqParamsItem> items, String name, String value) {
+        if (items == null || StringUtils.isEmpty(name)) {
+            return;
+        }
+        for (DsApiReqParamsItem item : items) {
+            if (item == null || StringUtils.isEmpty(item.getName())) {
+                continue;
+            }
+            if (name.equalsIgnoreCase(item.getName().trim())) {
+                item.setValue(value);
+            }
+        }
+    }
+
+    private String setJsonNumberOrStringField(String body, String field, int pageNum) {
+        if (StringUtils.isEmpty(body) || StringUtils.isEmpty(field)) {
+            return body;
+        }
+        String trimmed = body.trim();
+        if (!trimmed.startsWith("{")) {
+            return body;
+        }
+        try {
+            JSONObject obj = JSON.parseObject(trimmed);
+            if (obj == null || !obj.containsKey(field)) {
+                // 尝试大小写不敏感匹配已有 key
+                String matched = null;
+                if (obj != null) {
+                    for (String key : obj.keySet()) {
+                        if (field.equalsIgnoreCase(key)) {
+                            matched = key;
+                            break;
+                        }
+                    }
+                }
+                if (matched == null) {
+                    return body;
+                }
+                field = matched;
+            }
+            Object old = obj.get(field);
+            if (old instanceof String) {
+                obj.put(field, String.valueOf(pageNum));
+            } else {
+                obj.put(field, pageNum);
+            }
+            return obj.toJSONString();
+        } catch (Exception e) {
+            return body;
+        }
     }
 
     private Object parseRootJson(String raw) {
@@ -341,6 +838,9 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         if (entity.getBelongToRelyDatasource() == null) {
             entity.setBelongToRelyDatasource(1);
         }
+        if (entity.getPageApi() == null) {
+            entity.setPageApi(0);
+        }
         if (entity.getReqType() == null) {
             entity.setReqType(REQ_GET);
         }
@@ -394,7 +894,8 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             }
             fillReqParams(entity);
             Map<String, String> relyValues = resolveRelyValues(entity.getRelyDatasourceId());
-            DsApiTestResult result = doHttpRequest(entity, relyValues);
+            // 分页接口测试：缩小 pageSize，只打一页，避免响应过大导致页面卡顿
+            DsApiTestResult result = doHttpRequest(entity, relyValues, null, isPageApi(entity));
             result.setTestTime(System.currentTimeMillis() - begin);
             return result;
         } catch (Exception e) {
@@ -415,7 +916,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         if (rely == null) {
             throw new IllegalStateException("rely datasource not found: " + relyDatasourceId);
         }
-        DsApiTestResult relyResult = doHttpRequest(rely, null);
+        DsApiTestResult relyResult = doHttpRequest(rely, null, null, isPageApi(rely));
         if (relyResult.getTestStatus() == null || relyResult.getTestStatus() != 0) {
             throw new IllegalStateException("rely api call failed: " + relyResult.getTestResult());
         }
@@ -424,7 +925,12 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         return map;
     }
 
-    private DsApiTestResult doHttpRequest(DsApiDatasource entity, Map<String, String> relyValues) {
+    /**
+     * @param pageNumOverride 非空时覆盖请求中的页码（pageNum/pageNo 等），用于作业自动翻页
+     * @param shrinkPageSize  为 true 时把 pageSize/limit 等改为 {@link #TEST_PAGE_SIZE}（测试连接）
+     */
+    private DsApiTestResult doHttpRequest(DsApiDatasource entity, Map<String, String> relyValues,
+                                          Integer pageNumOverride, boolean shrinkPageSize) {
         DsApiTestResult result = new DsApiTestResult();
         long begin = System.currentTimeMillis();
         try {
@@ -432,6 +938,16 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             DsApiReqParams reqParams = copyReqParams(entity.getReqParams());
             if (relyValues != null && !relyValues.isEmpty()) {
                 replacePlaceholders(reqParams, relyValues);
+            }
+            if (shrinkPageSize) {
+                applyPageSize(reqParams, TEST_PAGE_SIZE);
+            }
+            if (pageNumOverride != null) {
+                String pageKey = detectPageNumKey(reqParams);
+                if (StringUtils.isEmpty(pageKey)) {
+                    pageKey = "pageNum";
+                }
+                applyPageNumber(reqParams, pageKey, pageNumOverride);
             }
             String url = buildUrl(entity.getApiUrl(), reqParams);
             Integer reqType = entity.getReqType() == null ? REQ_GET : entity.getReqType();
@@ -465,8 +981,19 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             result.setTestTime(System.currentTimeMillis() - begin);
             result.setTestResult(bodyText);
             result.setTestStatus(code >= 200 && code < 300 ? 0 : 1);
-            if (result.getTestStatus() == 1 && StringUtils.isEmpty(bodyText)) {
-                result.setTestResult("HTTP " + code);
+            if (result.getTestStatus() == 1) {
+                String method = REQ_POST == reqType ? "POST" : "GET";
+                String hint = "";
+                if (code == 405) {
+                    hint = REQ_POST == reqType
+                            ? "；405=方法不允许，请改成 GET，并把 pageNum/pageSize 放到「入参/分页参数」而不是 Body"
+                            : "；405=方法不允许，请改成 POST，并把 JSON 放到 Body";
+                }
+                if (StringUtils.isEmpty(bodyText)) {
+                    result.setTestResult("HTTP " + code + " " + method + " " + url + hint);
+                } else {
+                    result.setTestResult("HTTP " + code + " " + method + " " + url + hint + "\n" + bodyText);
+                }
             }
         } catch (Exception e) {
             result.setTestTime(System.currentTimeMillis() - begin);

@@ -89,6 +89,28 @@ public class MysqlDdlDialect extends AbstractDsDdlDialect {
     }
 
     @Override
+    public List<String> buildAlterPrimaryKeySqls(String tableName, boolean dropExisting, List<String> pkColumns) {
+        if (pkColumns == null || pkColumns.isEmpty()) {
+            throw new IllegalArgumentException("主键列不能为空");
+        }
+        List<String> cols = new ArrayList<>();
+        for (String c : pkColumns) {
+            if (StringUtils.isEmpty(c)) {
+                throw new IllegalArgumentException("主键列名不能为空");
+            }
+            cols.add(quote(c.trim()));
+        }
+        String qTable = quote(tableName);
+        // 合并成一条 ALTER，减少中间态失败窗口
+        StringBuilder sb = new StringBuilder("ALTER TABLE ").append(qTable);
+        if (dropExisting) {
+            sb.append(" DROP PRIMARY KEY,");
+        }
+        sb.append(" ADD PRIMARY KEY (").append(String.join(",", cols)).append(")");
+        return Collections.singletonList(sb.toString());
+    }
+
+    @Override
     public String buildCreateIndexSql(DsIndexRequest request) {
         if (request.getColumns() == null || request.getColumns().isEmpty()) {
             throw new IllegalArgumentException("索引列不能为空");
