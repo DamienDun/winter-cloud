@@ -41,6 +41,12 @@
       <el-col :span="1.5">
         <el-button type="danger" plain icon="el-icon-delete" size="mini" :disabled="multiple" @click="handleDelete" v-hasPermi="['datasource:api:remove']">删除</el-button>
       </el-col>
+      <el-col :span="1.5">
+        <el-button type="success" plain icon="el-icon-video-play" size="mini" :disabled="multiple" @click="handleChangeStatus(1)" v-hasPermi="['datasource:api:edit']">批量启用</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button type="warning" plain icon="el-icon-video-pause" size="mini" :disabled="multiple" @click="handleChangeStatus(0)" v-hasPermi="['datasource:api:edit']">批量停用</el-button>
+      </el-col>
       <right-toolbar :showSearch.sync="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
@@ -286,14 +292,14 @@
               <span class="api-ds-panel-title">{{ isWebService ? 'Body（SOAP XML）' : 'Body（JSON）' }}</span>
             </div>
             <div class="api-ds-panel-body">
+              <!-- placeholder 不能写字面量 </xxx>，否则会截断模板导致 Body 无法编辑 -->
               <el-input
-                v-model="form.reqParams.body"
+                :value="bodyText"
                 type="textarea"
                 :rows="isWebService ? 10 : 5"
-                :placeholder="isWebService
-                  ? '<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">...</soapenv:Envelope>'
-                  : '{\"pageNum\":1,\"pageSize\":100}'"
+                :placeholder="bodyPlaceholder"
                 class="api-ds-body-input"
+                @input="onBodyInput"
               />
             </div>
           </div>
@@ -384,7 +390,7 @@
 </template>
 
 <script>
-import { listApiDatasource, getApiDatasource, addApiDatasource, updateApiDatasource, delApiDatasource, testApiDatasource, listRelyCandidates, listApiOutputFields } from '@/api/datasource/api'
+import { listApiDatasource, getApiDatasource, addApiDatasource, updateApiDatasource, delApiDatasource, testApiDatasource, changeApiDatasourceStatus, listRelyCandidates, listApiOutputFields } from '@/api/datasource/api'
 
 export default {
   name: 'DatasourceApi',
@@ -446,6 +452,16 @@ export default {
     isWebService() {
       return this.form && this.form.datasourceType === 'WEBSERVICE'
     },
+    bodyText() {
+      return (this.form && this.form.reqParams && this.form.reqParams.body) || ''
+    },
+    /** 放 computed，避免模板里出现 </tag> 破坏 DOM */
+    bodyPlaceholder() {
+      if (this.isWebService) {
+        return '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">...完整SOAP报文...</soapenv:Envelope>'
+      }
+      return '{"pageNum":1,"pageSize":100}'
+    },
     viewReqParams() {
       const empty = { params: [], headers: [], body: '', page: [], preRequestScript: '', soapAction: '' }
       if (!this.viewForm) {
@@ -492,6 +508,24 @@ export default {
         if (this.form.reqParams.soapAction == null) {
           this.$set(this.form.reqParams, 'soapAction', '')
         }
+      }
+    },
+    onBodyInput(val) {
+      if (!this.form.reqParams) {
+        this.$set(this.form, 'reqParams', this.emptyReqParams())
+      }
+      this.$set(this.form.reqParams, 'body', val == null ? '' : String(val))
+    },
+    ensureReqParams() {
+      if (!this.form.reqParams) {
+        this.$set(this.form, 'reqParams', this.emptyReqParams())
+        return
+      }
+      if (this.form.reqParams.body == null) {
+        this.$set(this.form.reqParams, 'body', '')
+      }
+      if (this.form.reqParams.soapAction == null) {
+        this.$set(this.form.reqParams, 'soapAction', '')
       }
     },
     /** 详情/测试结果：尽量格式化 JSON，失败则原样返回 */
@@ -748,6 +782,7 @@ export default {
         // 先不绑依赖ID，等候选加载完再赋值，避免 el-select 对不上 option 显示成裸数字
         data.relyDatasourceId = undefined
         this.form = data
+        this.ensureReqParams()
         this.open = true
         this.title = '修改API数据源'
         if (this.form.belongToRelyDatasource === 0) {
@@ -813,6 +848,21 @@ export default {
         this.$modal.msgSuccess('删除成功')
       }).catch(() => {})
     },
+    /** 批量启用(1)/停用(0) */
+    handleChangeStatus(status) {
+      if (!this.ids || !this.ids.length) {
+        this.$modal.msgWarning('请先勾选数据源')
+        return
+      }
+      const label = status === 1 ? '启用' : '停用'
+      const idList = this.ids.map(id => String(id))
+      this.$modal.confirm('确认批量' + label + '选中的 ' + idList.length + ' 个API数据源？').then(() => {
+        return changeApiDatasourceStatus(idList, status)
+      }).then(() => {
+        this.getList()
+        this.$modal.msgSuccess('批量' + label + '成功')
+      }).catch(() => {})
+    },
     handleTestRow(row) {
       this.testing = true
       testApiDatasource({ id: row.id }).then(res => {
@@ -837,7 +887,12 @@ export default {
           return
         }
         this.testing = true
-        testApiDatasource(this.form).then(res => {
+        // 以当前表单 reqParams 为准；去掉可能过期的 reqParamsJson，避免后端被旧 JSON 覆盖
+        const payload = Object.assign({}, this.form, {
+          reqParams: this.normalizeReqParams(this.form.reqParams),
+          reqParamsJson: undefined
+        })
+        testApiDatasource(payload).then(res => {
           this.showTestResult(res.data || res)
         }).catch(err => {
           const data = (err && err.data) || (err.response && err.response.data && err.response.data.data)

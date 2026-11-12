@@ -45,6 +45,15 @@ export function delDatasource(ids) {
   })
 }
 
+/** 批量修改状态：ids 为字符串数组，status 0停用/1启用 */
+export function changeDatasourceStatus(ids, status) {
+  return request({
+    url: '/datasource/info/changeStatus',
+    method: 'put',
+    data: { ids, status }
+  })
+}
+
 export function testDatasource(data) {
   return request({
     url: '/datasource/info/test',

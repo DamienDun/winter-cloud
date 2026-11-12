@@ -1,6 +1,8 @@
 package com.winter.cloud.gateway.filter;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -34,6 +36,16 @@ import reactor.core.publisher.Mono;
 @ConditionalOnProperty(value = "security.xss.enabled", havingValue = "true")
 public class XssFilter implements GlobalFilter, Ordered
 {
+    /**
+     * 内置排除：请求体本身就要带 HTML/XML（如 WebService SOAP Body），
+     * EscapeUtil.clean 会剥标签，导致编辑页测连/保存变成 Unexpected EOF。
+     */
+    private static final List<String> BUILTIN_EXCLUDE_URLS = Arrays.asList(
+            "/system/notice",
+            "/datasource/api",
+            "/datasource/api/**"
+    );
+
     // 跨站脚本的 xss 配置，nacos自行添加
     @Autowired
     private XssProperties xss;
@@ -58,9 +70,9 @@ public class XssFilter implements GlobalFilter, Ordered
         {
             return chain.filter(exchange);
         }
-        // excludeUrls 不过滤
+        // excludeUrls 不过滤（配置项 + 内置）
         String url = request.getURI().getPath();
-        if (StringUtils.matches(url, xss.getExcludeUrls()))
+        if (StringUtils.matches(url, xss.getExcludeUrls()) || StringUtils.matches(url, BUILTIN_EXCLUDE_URLS))
         {
             return chain.filter(exchange);
         }

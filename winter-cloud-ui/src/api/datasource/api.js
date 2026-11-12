@@ -53,6 +53,15 @@ export function delApiDatasource(ids) {
   })
 }
 
+/** 批量修改状态：ids 为字符串数组，status 0停用/1启用 */
+export function changeApiDatasourceStatus(ids, status) {
+  return request({
+    url: '/datasource/api/changeStatus',
+    method: 'put',
+    data: { ids, status }
+  })
+}
+
 export function testApiDatasource(data) {
   return request({
     url: '/datasource/api/test',

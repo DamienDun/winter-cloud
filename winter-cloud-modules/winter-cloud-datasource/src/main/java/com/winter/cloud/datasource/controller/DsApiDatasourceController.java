@@ -8,6 +8,7 @@ import com.winter.cloud.common.log.annotation.Log;
 import com.winter.cloud.common.log.enums.BusinessType;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
 import com.winter.cloud.datasource.domain.dto.DsApiTestResult;
+import com.winter.cloud.datasource.domain.dto.DsChangeStatusRequest;
 import com.winter.cloud.datasource.domain.entity.DsApiDatasource;
 import com.winter.cloud.datasource.service.IDsApiDatasourceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -105,6 +106,19 @@ public class DsApiDatasourceController extends BaseController {
         }
     }
 
+    @RequiresPermissions("datasource:api:edit")
+    @Log(title = "API datasource", businessType = BusinessType.UPDATE)
+    @PutMapping("/changeStatus")
+    @Operation(summary = "batch change status")
+    public AjaxResult changeStatus(@RequestBody DsChangeStatusRequest request) {
+        try {
+            Long[] idArr = parseIds(request == null ? null : request.getIds());
+            return toAjax(apiDatasourceService.changeStatus(idArr, request == null ? null : request.getStatus()));
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
     @RequiresPermissions("datasource:api:remove")
     @Log(title = "API datasource", businessType = BusinessType.DELETE)
     @DeleteMapping("/{ids}")
@@ -117,6 +131,17 @@ public class DsApiDatasourceController extends BaseController {
         } catch (Exception e) {
             return error(e.getMessage());
         }
+    }
+
+    private Long[] parseIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new IllegalArgumentException("请选择数据源");
+        }
+        return ids.stream()
+                .filter(s -> s != null && !s.trim().isEmpty())
+                .map(String::trim)
+                .map(Long::valueOf)
+                .toArray(Long[]::new);
     }
 
     @RequiresPermissions("datasource:api:test")

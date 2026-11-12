@@ -8,6 +8,7 @@ import com.winter.cloud.common.log.annotation.Log;
 import com.winter.cloud.common.log.enums.BusinessType;
 import com.winter.cloud.common.security.annotation.Logical;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
+import com.winter.cloud.datasource.domain.dto.DsChangeStatusRequest;
 import com.winter.cloud.datasource.domain.entity.DsJdbcDatasource;
 import com.winter.cloud.datasource.service.IDsJdbcDatasourceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -73,6 +74,19 @@ public class DsJdbcDatasourceController extends BaseController {
         return toAjax(datasourceService.update(entity));
     }
 
+    @RequiresPermissions("datasource:info:edit")
+    @Log(title = "数据源管理", businessType = BusinessType.UPDATE)
+    @PutMapping("/changeStatus")
+    @Operation(summary = "批量修改状态")
+    public AjaxResult changeStatus(@RequestBody DsChangeStatusRequest request) {
+        try {
+            Long[] idArr = parseIds(request == null ? null : request.getIds());
+            return toAjax(datasourceService.changeStatus(idArr, request == null ? null : request.getStatus()));
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
     @RequiresPermissions("datasource:info:remove")
     @Log(title = "数据源管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{ids}")
@@ -81,6 +95,17 @@ public class DsJdbcDatasourceController extends BaseController {
         Long[] idArr = Arrays.stream(ids.split(Constants.ENGLISH_COMMA))
                 .map(String::trim).filter(s -> !s.isEmpty()).map(Long::valueOf).toArray(Long[]::new);
         return toAjax(datasourceService.deleteByIds(idArr));
+    }
+
+    private Long[] parseIds(java.util.List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new IllegalArgumentException("请选择数据源");
+        }
+        return ids.stream()
+                .filter(s -> s != null && !s.trim().isEmpty())
+                .map(String::trim)
+                .map(Long::valueOf)
+                .toArray(Long[]::new);
     }
 
     @RequiresPermissions("datasource:info:test")

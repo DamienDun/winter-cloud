@@ -31,6 +31,12 @@
       <el-col :span="1.5">
         <el-button type="danger" plain icon="el-icon-delete" size="mini" :disabled="multiple" @click="handleDelete" v-hasPermi="['datasource:info:remove']">删除</el-button>
       </el-col>
+      <el-col :span="1.5">
+        <el-button type="success" plain icon="el-icon-video-play" size="mini" :disabled="multiple" @click="handleChangeStatus(1)" v-hasPermi="['datasource:info:edit']">批量启用</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button type="warning" plain icon="el-icon-video-pause" size="mini" :disabled="multiple" @click="handleChangeStatus(0)" v-hasPermi="['datasource:info:edit']">批量停用</el-button>
+      </el-col>
       <right-toolbar :showSearch.sync="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
@@ -157,7 +163,7 @@
 </template>
 
 <script>
-import { listDatasource, getDatasource, addDatasource, updateDatasource, delDatasource, testDatasource } from '@/api/datasource/info'
+import { listDatasource, getDatasource, addDatasource, updateDatasource, delDatasource, testDatasource, changeDatasourceStatus } from '@/api/datasource/info'
 
 const TYPE_TEMPLATES = {
   mysql: {
@@ -340,6 +346,21 @@ export default {
       }).then(() => {
         this.getList()
         this.$modal.msgSuccess('删除成功')
+      }).catch(() => {})
+    },
+    /** 批量启用(1)/停用(0) */
+    handleChangeStatus(status) {
+      if (!this.ids || !this.ids.length) {
+        this.$modal.msgWarning('请先勾选数据源')
+        return
+      }
+      const label = status === 1 ? '启用' : '停用'
+      const idList = this.ids.map(id => String(id))
+      this.$modal.confirm('确认批量' + label + '选中的 ' + idList.length + ' 个数据源？').then(() => {
+        return changeDatasourceStatus(idList, status)
+      }).then(() => {
+        this.getList()
+        this.$modal.msgSuccess('批量' + label + '成功')
       }).catch(() => {})
     },
     handleTestRow(row) {

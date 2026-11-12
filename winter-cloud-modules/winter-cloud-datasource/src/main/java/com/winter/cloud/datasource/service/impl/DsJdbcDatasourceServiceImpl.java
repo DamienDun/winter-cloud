@@ -1,6 +1,7 @@
 package com.winter.cloud.datasource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.common.datasource.info.DatasourceInfo;
@@ -82,6 +83,21 @@ public class DsJdbcDatasourceServiceImpl implements IDsJdbcDatasourceService {
             encryptPasswordIfNeed(entity, false);
         }
         return datasourceMapper.updateById(entity);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int changeStatus(Long[] ids, Integer status) {
+        if (ids == null || ids.length == 0) {
+            throw new IllegalArgumentException("请选择数据源");
+        }
+        if (status == null || (status != 0 && status != 1)) {
+            throw new IllegalArgumentException("状态只能是 0(停用) 或 1(启用)");
+        }
+        LambdaUpdateWrapper<DsJdbcDatasource> uw = Wrappers.lambdaUpdate();
+        uw.in(DsJdbcDatasource::getId, Arrays.asList(ids))
+                .set(DsJdbcDatasource::getStatus, status);
+        return datasourceMapper.update(null, uw);
     }
 
     @Override

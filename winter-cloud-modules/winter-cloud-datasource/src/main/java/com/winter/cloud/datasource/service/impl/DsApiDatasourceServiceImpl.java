@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.datasource.domain.dto.DsApiFieldItem;
@@ -953,6 +954,21 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public int changeStatus(Long[] ids, Integer status) {
+        if (ids == null || ids.length == 0) {
+            throw new IllegalArgumentException("请选择数据源");
+        }
+        if (status == null || (status != 0 && status != 1)) {
+            throw new IllegalArgumentException("状态只能是 0(停用) 或 1(启用)");
+        }
+        LambdaUpdateWrapper<DsApiDatasource> uw = Wrappers.lambdaUpdate();
+        uw.in(DsApiDatasource::getId, Arrays.asList(ids))
+                .set(DsApiDatasource::getStatus, status);
+        return apiDatasourceMapper.update(null, uw);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public int deleteByIds(Long[] ids) {
         if (ids == null || ids.length == 0) {
             return 0;
@@ -1272,7 +1288,8 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         if (entity == null) {
             return;
         }
-        if (StringUtils.isNotEmpty(entity.getReqParamsJson())) {
+        // 编辑页测连/保存会同时带 reqParams 与可能过期的 reqParamsJson；已有结构化参数时禁止被 JSON 覆盖
+        if (entity.getReqParams() == null && StringUtils.isNotEmpty(entity.getReqParamsJson())) {
             entity.setReqParams(JSON.parseObject(entity.getReqParamsJson(), DsApiReqParams.class));
         }
         if (entity.getReqParams() == null) {

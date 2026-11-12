@@ -37,6 +37,8 @@ public interface IDsApiDatasourceService {
     }
     int insert(DsApiDatasource entity);
     int update(DsApiDatasource entity);
+    /** 批量修改状态：0 停用，1 启用 */
+    int changeStatus(Long[] ids, Integer status);
     int deleteByIds(Long[] ids);
     DsApiTestResult testConnection(DsApiDatasource entity);
 }
