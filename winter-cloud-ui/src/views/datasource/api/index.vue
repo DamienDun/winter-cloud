@@ -176,42 +176,83 @@
           </el-radio-group>
         </el-form-item>
         <template v-if="form.belongToRelyDatasource === 0">
-          <el-form-item label="依赖API" prop="relyDatasourceId">
-            <el-select
-              v-model="form.relyDatasourceId"
-              clearable
-              filterable
-              :filter-method="filterRelyOptions"
-              :loading="relyLoading"
-              placeholder="输入名称模糊搜索并选择"
-              style="width: 100%"
-              @change="onRelyChange"
-              @visible-change="onRelyVisible"
-            >
-              <el-option
-                v-for="item in relyOptionsView"
-                :key="String(item.id)"
-                :label="item.datasourceName"
-                :value="String(item.id)"
-              >
-                <span>{{ item.datasourceName }}</span>
-                <span style="float: right; color: #909399; font-size: 12px">{{ item.reqType === 0 ? 'POST' : 'GET' }}</span>
-              </el-option>
-            </el-select>
+          <el-form-item label="依赖列表" label-width="110px" class="api-ds-block-item">
+            <div class="api-ds-panel">
+              <div class="api-ds-panel-toolbar">
+                <span class="api-ds-panel-title">按顺序执行；后项可引用先项出参（别名占位）</span>
+                <el-button type="text" icon="el-icon-plus" @click="addRelyRow">添加依赖</el-button>
+              </div>
+              <div class="api-ds-panel-body">
+                <el-table :data="form.relyList || []" size="mini" border empty-text="请添加依赖API" max-height="260">
+                  <el-table-column label="顺序" width="110" align="center">
+                    <template slot-scope="scope">
+                      <span class="api-ds-rely-ord">{{ scope.$index + 1 }}</span>
+                      <el-button type="text" icon="el-icon-top" :disabled="scope.$index === 0" title="上移" @click="moveRelyRow(scope.$index, -1)" />
+                      <el-button type="text" icon="el-icon-bottom" :disabled="scope.$index >= (form.relyList.length - 1)" title="下移" @click="moveRelyRow(scope.$index, 1)" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="别名" width="120">
+                    <template slot-scope="scope">
+                      <el-input v-model="scope.row.alias" size="mini" placeholder="如 auth" maxlength="32" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="依赖API" min-width="220">
+                    <template slot-scope="scope">
+                      <el-select
+                        v-model="scope.row.datasourceId"
+                        clearable
+                        filterable
+                        :filter-method="filterRelyOptions"
+                        :loading="relyLoading"
+                        placeholder="选择API"
+                        size="mini"
+                        style="width: 100%"
+                        @visible-change="onRelyVisible"
+                        @change="onRelyRowChange(scope.row)"
+                      >
+                        <el-option
+                          v-for="item in relyOptionsView"
+                          :key="String(item.id)"
+                          :label="item.datasourceName"
+                          :value="String(item.id)"
+                        >
+                          <span>{{ item.datasourceName }}</span>
+                          <span style="float: right; color: #909399; font-size: 12px">{{ item.reqType === 0 ? 'POST' : 'GET' }}</span>
+                        </el-option>
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column width="50" align="center">
+                    <template slot-scope="scope">
+                      <el-button type="text" icon="el-icon-delete" @click="removeRelyRow(scope.$index)" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </div>
           </el-form-item>
-          <el-form-item label="出参填充" v-if="form.relyDatasourceId" label-width="110px" class="api-ds-fill-item">
+          <el-form-item label="出参填充" v-if="(form.relyList || []).length" label-width="110px" class="api-ds-fill-item">
             <div class="api-ds-panel api-ds-fill-panel">
               <div class="api-ds-panel-toolbar">
-                <span class="api-ds-panel-title">将依赖接口出参写入请求头/入参</span>
-                <el-button type="text" size="mini" icon="el-icon-refresh" :loading="fieldLoading" @click="loadRelyFields">刷新出参</el-button>
+                <span class="api-ds-panel-title">将某依赖出参写入请求头/入参</span>
+                <el-button type="text" size="mini" icon="el-icon-refresh" :loading="fieldLoading" :disabled="!fillRelyAlias" @click="loadRelyFields">刷新出参</el-button>
               </div>
               <div class="api-ds-fill-row">
+                <el-select v-model="fillRelyAlias" clearable placeholder="依赖别名" class="api-ds-fill-target" @change="onFillRelyAliasChange">
+                  <el-option
+                    v-for="r in (form.relyList || [])"
+                    :key="r.alias + '_' + r.datasourceId"
+                    :label="(r.alias || '-') + (relyNameOf(r.datasourceId) ? ' / ' + relyNameOf(r.datasourceId) : '')"
+                    :value="r.alias"
+                    :disabled="!r.alias || !r.datasourceId"
+                  />
+                </el-select>
                 <el-select
                   v-model="fillField"
                   filterable
                   clearable
                   :loading="fieldLoading"
-                  placeholder="依赖出参字段"
+                  placeholder="出参字段"
                   class="api-ds-fill-field"
                 >
                   <el-option
@@ -229,10 +270,10 @@
                   <el-option label="入参" value="params" />
                 </el-select>
                 <el-input v-model="fillName" placeholder="参数名，如 Authorization" class="api-ds-fill-name" />
-                <el-button type="primary" plain size="mini" :disabled="!fillField" @click="applyRelyField">填入</el-button>
+                <el-button type="primary" plain size="mini" :disabled="!fillField || !fillRelyAlias" @click="applyRelyField">填入</el-button>
               </div>
-              <!-- v-pre：禁止把 {{rely.xxx}} 当 Vue 表达式（HTML 实体仍会被解码成 mustache 导致整页渲染报错） -->
-              <div class="api-ds-hint api-ds-hint--inpanel" v-pre>填入后值为 <code>{{rely.字段路径}}</code>，测试/同步时自动替换为依赖接口实际出参。</div>
+              <!-- v-pre：禁止把 {{rely.xxx}} 当 Vue 表达式 -->
+              <div class="api-ds-hint api-ds-hint--inpanel" v-pre>填入后值为 <code>{{rely.别名.字段路径}}</code>；仅一项且别名为 rely 时仍兼容旧写法 <code>{{rely.字段路径}}</code>。</div>
             </div>
           </el-form-item>
         </template>
@@ -335,8 +376,14 @@
           {{ (viewForm.reqParams && viewForm.reqParams.soapAction) || (viewReqParams && viewReqParams.soapAction) || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="依赖数据源">{{ viewForm.belongToRelyDatasource === 0 ? '是' : '否' }}</el-descriptions-item>
-        <el-descriptions-item label="依赖API">
-          <template v-if="viewForm.belongToRelyDatasource === 0">
+        <el-descriptions-item label="依赖列表" :span="2">
+          <template v-if="viewForm.belongToRelyDatasource === 0 && viewRelyList.length">
+            <div v-for="(r, i) in viewRelyList" :key="i" style="line-height: 1.6">
+              {{ r.sort != null ? r.sort : (i + 1) }}. {{ r.alias || '-' }}
+              → {{ r.name || r.datasourceId || '-' }}
+            </div>
+          </template>
+          <template v-else-if="viewForm.belongToRelyDatasource === 0">
             {{ viewRelyName || '-' }}
             <span v-if="viewForm.relyDatasourceId" style="color: #909399; margin-left: 6px">({{ viewForm.relyDatasourceId }})</span>
           </template>
@@ -409,12 +456,14 @@ export default {
       title: '',
       viewForm: null,
       viewRelyName: '',
+      viewRelyList: [],
       testResult: null,
       relyOptions: [],
       relyOptionsView: [],
       relyLoading: false,
       relyFields: [],
       fieldLoading: false,
+      fillRelyAlias: undefined,
       fillField: undefined,
       fillTarget: 'headers',
       fillName: '',
@@ -435,6 +484,7 @@ export default {
         status: 1,
         pageApi: 0,
         belongToRelyDatasource: 1,
+        relyList: [],
         reqParams: { params: [], headers: [], body: '', page: [], preRequestScript: '', soapAction: '' }
       },
       rules: {
@@ -644,28 +694,110 @@ export default {
     },
     onBelongRelyChange(val) {
       if (val !== 0) {
+        this.$set(this.form, 'relyList', [])
         this.form.relyDatasourceId = undefined
         this.relyFields = []
         this.fillField = undefined
+        this.fillRelyAlias = undefined
         this.relyOptions = []
         this.relyOptionsView = []
       } else {
+        if (!this.form.relyList || !this.form.relyList.length) {
+          this.addRelyRow()
+        }
         this.loadRelyOptions()
       }
     },
-    onRelyChange(id) {
-      this.fillField = undefined
-      this.relyFields = []
-      if (id) {
+    normalizeRelyList(raw) {
+      let list = raw
+      if (typeof raw === 'string' && raw.trim()) {
+        try {
+          list = JSON.parse(raw)
+        } catch (e) {
+          list = []
+        }
+      }
+      if (!Array.isArray(list) || !list.length) {
+        return []
+      }
+      const mapped = list.map((item, i) => ({
+        alias: (item && item.alias) || '',
+        datasourceId: item && item.datasourceId != null ? String(item.datasourceId) : undefined,
+        sort: item && item.sort != null ? Number(item.sort) : (i + 1)
+      }))
+      // 先按 sort 排，再统一重编号，保证保存/展示与表格行序一致
+      mapped.sort((a, b) => (a.sort || 0) - (b.sort || 0))
+      mapped.forEach((r, i) => { r.sort = i + 1 })
+      return mapped
+    },
+    addRelyRow() {
+      if (!this.form.relyList) {
+        this.$set(this.form, 'relyList', [])
+      }
+      const next = (this.form.relyList.length || 0) + 1
+      const used = new Set((this.form.relyList || []).map(r => (r.alias || '').toLowerCase()))
+      let alias = next === 1 ? 'rely' : ('rely' + next)
+      let n = next
+      while (used.has(alias.toLowerCase())) {
+        n++
+        alias = 'rely' + n
+      }
+      this.form.relyList.push({ alias: alias, datasourceId: undefined, sort: next })
+      this.reindexRelySort()
+      this.loadRelyOptions()
+    },
+    removeRelyRow(index) {
+      if (!this.form.relyList) return
+      const removed = this.form.relyList.splice(index, 1)[0]
+      this.reindexRelySort()
+      if (removed && removed.alias === this.fillRelyAlias) {
+        this.fillRelyAlias = undefined
+        this.relyFields = []
+        this.fillField = undefined
+      }
+    },
+    /** 上移/下移调整执行顺序（列表从上到下执行） */
+    moveRelyRow(index, delta) {
+      const list = this.form.relyList
+      if (!list || !list.length) return
+      const target = index + delta
+      if (target < 0 || target >= list.length) return
+      const row = list.splice(index, 1)[0]
+      list.splice(target, 0, row)
+      this.reindexRelySort()
+    },
+    reindexRelySort() {
+      ;(this.form.relyList || []).forEach((r, i) => {
+        this.$set(r, 'sort', i + 1)
+      })
+    },
+    onRelyRowChange(row) {
+      if (row && row.alias && row.alias === this.fillRelyAlias) {
         this.loadRelyFields()
       }
     },
+    onFillRelyAliasChange() {
+      this.fillField = undefined
+      this.relyFields = []
+      if (this.fillRelyAlias) {
+        this.loadRelyFields()
+      }
+    },
+    relyNameOf(id) {
+      if (id == null || id === '') return ''
+      const hit = (this.relyOptions || []).find(i => String(i.id) === String(id))
+      return hit ? (hit.datasourceName || '') : ''
+    },
     loadRelyFields() {
-      if (!this.form.relyDatasourceId) {
+      const alias = this.fillRelyAlias
+      const row = (this.form.relyList || []).find(r => r.alias === alias)
+      const id = row && row.datasourceId
+      if (!id) {
+        this.$modal.msgWarning('请先为该别名选择依赖API')
         return
       }
       this.fieldLoading = true
-      listApiOutputFields(this.form.relyDatasourceId).then(res => {
+      listApiOutputFields(id).then(res => {
         this.relyFields = res.data || []
         if (!this.relyFields.length) {
           this.$modal.msgWarning('依赖接口未解析到出参字段，请确认该接口可连通且返回JSON')
@@ -677,6 +809,10 @@ export default {
       })
     },
     applyRelyField() {
+      if (!this.fillRelyAlias) {
+        this.$modal.msgWarning('请先选择依赖别名')
+        return
+      }
       if (!this.fillField) {
         this.$modal.msgWarning('请先选择依赖出参')
         return
@@ -688,7 +824,7 @@ export default {
       }
       this.form.reqParams[target].push({
         name: name,
-        value: '{{rely.' + this.fillField + '}}',
+        value: '{{rely.' + this.fillRelyAlias + '.' + this.fillField + '}}',
         type: 'string',
         isAvailable: 0
       })
@@ -719,12 +855,16 @@ export default {
         dataItemKey: undefined,
         pageApi: 0,
         relyDatasourceId: undefined,
+        relyList: [],
         belongToRelyDatasource: 1,
         datasourceDesc: undefined,
         status: 1,
         remark: undefined,
         reqParams: this.emptyReqParams()
       }
+      this.fillRelyAlias = undefined
+      this.relyFields = []
+      this.fillField = undefined
       this.clearTestResultOverlay()
       this.testResult = null
       this.resetForm('form')
@@ -742,20 +882,27 @@ export default {
     handleView(row) {
       const id = row && row.id != null ? String(row.id) : row.id
       this.viewRelyName = ''
+      this.viewRelyList = []
       getApiDatasource(id).then(res => {
         const data = res.data || {}
         if (data.id != null) data.id = String(data.id)
         if (data.relyDatasourceId != null) data.relyDatasourceId = String(data.relyDatasourceId)
         this.viewForm = data
         this.viewOpen = true
-        // 回填依赖API名称
-        if (data.belongToRelyDatasource === 0 && data.relyDatasourceId) {
-          getApiDatasource(data.relyDatasourceId).then(relyRes => {
-            this.viewRelyName = (relyRes.data && relyRes.data.datasourceName) || ''
-          }).catch(() => {
-            this.viewRelyName = ''
-          })
+        const list = this.normalizeRelyList(data.relyList || data.relyListJson)
+        if (!list.length && data.belongToRelyDatasource === 0 && data.relyDatasourceId) {
+          list.push({ alias: 'rely', datasourceId: data.relyDatasourceId, sort: 1 })
         }
+        this.viewRelyList = list.map(r => ({ ...r, name: '' }))
+        // 回填依赖API名称
+        this.viewRelyList.forEach((r, idx) => {
+          if (!r.datasourceId) return
+          getApiDatasource(r.datasourceId).then(relyRes => {
+            const name = (relyRes.data && relyRes.data.datasourceName) || ''
+            this.$set(this.viewRelyList[idx], 'name', name)
+            if (idx === 0) this.viewRelyName = name
+          }).catch(() => {})
+        })
       })
     },
     handleUpdate(row) {
@@ -778,18 +925,25 @@ export default {
         // 雪花ID统一转字符串，与依赖下拉 option value 对齐
         if (data.id != null) data.id = String(data.id)
         if (!data.datasourceGroup) data.datasourceGroup = 'Default'
-        const relyId = data.relyDatasourceId != null ? String(data.relyDatasourceId) : undefined
+        let relyList = this.normalizeRelyList(data.relyList || data.relyListJson)
+        if (!relyList.length && data.belongToRelyDatasource === 0 && data.relyDatasourceId != null) {
+          relyList = [{ alias: 'rely', datasourceId: String(data.relyDatasourceId), sort: 1 }]
+        }
         // 先不绑依赖ID，等候选加载完再赋值，避免 el-select 对不上 option 显示成裸数字
         data.relyDatasourceId = undefined
+        data.relyList = []
         this.form = data
         this.ensureReqParams()
         this.open = true
         this.title = '修改API数据源'
         if (this.form.belongToRelyDatasource === 0) {
           this.loadRelyOptions().then(list => {
-            if (relyId) {
-              this.ensureRelyOption(relyId, list)
-              this.$set(this.form, 'relyDatasourceId', relyId)
+            relyList.forEach(r => {
+              if (r.datasourceId) this.ensureRelyOption(r.datasourceId, list)
+            })
+            this.$set(this.form, 'relyList', relyList)
+            if (relyList.length) {
+              this.fillRelyAlias = relyList[0].alias
               this.loadRelyFields()
             }
           })
@@ -833,9 +987,23 @@ export default {
     submitForm() {
       this.$refs.form.validate(valid => {
         if (!valid) return
-        const req = this.form.id != null ? updateApiDatasource(this.form) : addApiDatasource(this.form)
+        const payload = Object.assign({}, this.form)
+        if (payload.belongToRelyDatasource === 0) {
+          payload.relyList = this.normalizeRelyList(payload.relyList)
+          if (!payload.relyList.length) {
+            this.$modal.msgWarning('请至少配置一项依赖API')
+            return
+          }
+          // 兼容旧字段：首项写入 relyDatasourceId
+          payload.relyDatasourceId = payload.relyList[0].datasourceId
+        } else {
+          payload.relyList = []
+          payload.relyDatasourceId = undefined
+          payload.relyListJson = undefined
+        }
+        const req = payload.id != null ? updateApiDatasource(payload) : addApiDatasource(payload)
         req.then(() => {
-          this.$modal.msgSuccess(this.form.id != null ? '修改成功' : '新增成功')
+          this.$modal.msgSuccess(payload.id != null ? '修改成功' : '新增成功')
           this.open = false
           this.getList()
         })
@@ -887,11 +1055,16 @@ export default {
           return
         }
         this.testing = true
-        // 以当前表单 reqParams 为准；去掉可能过期的 reqParamsJson，避免后端被旧 JSON 覆盖
+        // 以当前表单 reqParams/relyList 为准；去掉可能过期的 JSON 字符串字段
         const payload = Object.assign({}, this.form, {
           reqParams: this.normalizeReqParams(this.form.reqParams),
-          reqParamsJson: undefined
+          reqParamsJson: undefined,
+          relyList: this.normalizeRelyList(this.form.relyList),
+          relyListJson: undefined
         })
+        if (payload.belongToRelyDatasource === 0 && payload.relyList.length) {
+          payload.relyDatasourceId = payload.relyList[0].datasourceId
+        }
         testApiDatasource(payload).then(res => {
           this.showTestResult(res.data || res)
         }).catch(err => {
@@ -1025,6 +1198,13 @@ export default {
   font-size: 13px;
   font-weight: 600;
   color: #303133;
+}
+.api-ds-rely-ord {
+  display: inline-block;
+  min-width: 14px;
+  margin-right: 2px;
+  font-weight: 600;
+  color: #606266;
 }
 .api-ds-panel-body {
   padding: 10px 12px 12px;

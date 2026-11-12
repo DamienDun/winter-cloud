@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.winter.cloud.common.core.utils.StringUtils;
 import com.winter.cloud.datasource.domain.dto.DsApiFieldItem;
+import com.winter.cloud.datasource.domain.dto.DsApiRelyItem;
 import com.winter.cloud.datasource.domain.dto.DsApiReqParams;
 import com.winter.cloud.datasource.domain.dto.DsApiReqParamsItem;
 import com.winter.cloud.datasource.domain.dto.DsApiTestResult;
@@ -32,10 +33,15 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -51,6 +57,8 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
     private static final String API_TYPE_HTTP = "HTTP";
     private static final String API_TYPE_WEBSERVICE = "WEBSERVICE";
     private static final Pattern RELY_PLACEHOLDER = Pattern.compile("\\{\\{rely\\.([0-9a-zA-Z_.]+)\\}\\}");
+    /** 依赖别名：字母开头，字母数字下划线，最长 32 */
+    private static final Pattern RELY_ALIAS_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{0,31}$");
 
     @Autowired
     private DsApiDatasourceMapper apiDatasourceMapper;
@@ -110,7 +118,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             throw new IllegalArgumentException("datasource not found");
         }
         // 与同步取数一致：先解析依赖 token，再调业务接口
-        Map<String, String> relyValues = resolveRelyValues(ds.getRelyDatasourceId());
+        Map<String, String> relyValues = resolveRelyValues(ds);
         DsApiTestResult test = doHttpRequest(ds, relyValues, null, isPageApi(ds));
         if (test.getTestStatus() == null || test.getTestStatus() != 0) {
             throw new IllegalStateException("api call failed: " + test.getTestResult());
@@ -343,7 +351,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
             throw new IllegalArgumentException("datasource not found");
         }
         fillReqParams(ds);
-        Map<String, String> relyValues = resolveRelyValues(ds.getRelyDatasourceId());
+        Map<String, String> relyValues = resolveRelyValues(ds);
         boolean pageApi = isPageApi(ds);
         String pageNumKey = detectPageNumKey(ds.getReqParams());
         log.info("api forEachDataPage start id={} name={} pageApi={} pageNumKey={}",
@@ -933,10 +941,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         } else if (entity.getReqType() == null) {
             entity.setReqType(REQ_GET);
         }
-        // no dependency selected -> clear rely id
-        if (!Integer.valueOf(0).equals(entity.getBelongToRelyDatasource())) {
-            entity.setRelyDatasourceId(null);
-        }
+        syncRelyList(entity);
         return apiDatasourceMapper.insert(entity);
     }
 
@@ -946,9 +951,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         normalize(entity);
         checkNameUnique(entity.getId(), entity.getDatasourceName());
         syncReqParamsJson(entity);
-        if (!Integer.valueOf(0).equals(entity.getBelongToRelyDatasource())) {
-            entity.setRelyDatasourceId(null);
-        }
+        syncRelyList(entity);
         return apiDatasourceMapper.updateById(entity);
     }
 
@@ -997,7 +1000,7 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
                 entity = db;
             }
             fillReqParams(entity);
-            Map<String, String> relyValues = resolveRelyValues(entity.getRelyDatasourceId());
+            Map<String, String> relyValues = resolveRelyValues(entity);
             // 分页接口测试：缩小 pageSize，只打一页，避免响应过大导致页面卡顿
             DsApiTestResult result = doHttpRequest(entity, relyValues, null, isPageApi(entity));
             result.setTestTime(System.currentTimeMillis() - begin);
@@ -1011,23 +1014,176 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         }
     }
 
-    private Map<String, String> resolveRelyValues(Long relyDatasourceId) {
-        Map<String, String> map = new LinkedHashMap<>();
-        if (relyDatasourceId == null || relyDatasourceId <= 0) {
-            return map;
+    /**
+     * 按依赖列表有序解析出参；后项可引用先项（以及依赖自身的依赖）。
+     * 占位符：{{rely.别名.字段}}；单依赖且别名为 rely 时额外写入裸字段以兼容 {{rely.字段}}。
+     */
+    private Map<String, String> resolveRelyValues(DsApiDatasource entity) {
+        return resolveRelyValues(entity, new LinkedHashSet<>());
+    }
+
+    private Map<String, String> resolveRelyValues(DsApiDatasource entity, Set<Long> visiting) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (entity == null || !Integer.valueOf(0).equals(entity.getBelongToRelyDatasource())) {
+            return out;
         }
-        DsApiDatasource rely = selectById(relyDatasourceId);
-        if (rely == null) {
-            throw new IllegalStateException("rely datasource not found: " + relyDatasourceId);
+        List<DsApiRelyItem> items = effectiveRelyList(entity);
+        if (items.isEmpty()) {
+            return out;
         }
-        DsApiTestResult relyResult = doHttpRequest(rely, null, null, isPageApi(rely));
-        if (relyResult.getTestStatus() == null || relyResult.getTestStatus() != 0) {
-            throw new IllegalStateException("rely api call failed: " + relyResult.getTestResult());
+        boolean singleLegacy = items.size() == 1;
+        for (DsApiRelyItem item : items) {
+            if (item == null || item.getDatasourceId() == null || item.getDatasourceId() <= 0) {
+                continue;
+            }
+            Long relyId = item.getDatasourceId();
+            if (!visiting.add(relyId)) {
+                throw new IllegalStateException("依赖环检测失败，数据源ID=" + relyId);
+            }
+            try {
+                DsApiDatasource rely = selectById(relyId);
+                if (rely == null) {
+                    throw new IllegalStateException("依赖API不存在: " + relyId + " (alias=" + item.getAlias() + ")");
+                }
+                // 同级已解析出参 + 该依赖自身的依赖出参，用于调通当前依赖
+                Map<String, String> forCall = new LinkedHashMap<>(out);
+                forCall.putAll(resolveRelyValues(rely, visiting));
+                DsApiTestResult relyResult = doHttpRequest(rely, forCall, null, isPageApi(rely));
+                if (relyResult.getTestStatus() == null || relyResult.getTestStatus() != 0) {
+                    throw new IllegalStateException("依赖API调用失败 alias=" + item.getAlias()
+                            + " id=" + relyId + " : " + relyResult.getTestResult());
+                }
+                Object root = parseRoot(rely, relyResult.getTestResult());
+                Object parsed = navigateByDataItemKey(rely, rely.getDataItemKey(), root, relyResult.getTestResult());
+                Map<String, String> flat = new LinkedHashMap<>();
+                flattenFields("", parsed, flat, 0);
+                putRelyFlat(out, item.getAlias(), flat, singleLegacy);
+            } finally {
+                visiting.remove(relyId);
+            }
         }
-        Object root = parseRoot(rely, relyResult.getTestResult());
-        Object parsed = navigateByDataItemKey(rely, rely.getDataItemKey(), root, relyResult.getTestResult());
-        flattenFields("", parsed, map, 0);
-        return map;
+        return out;
+    }
+
+    /** 将单次依赖出参写入总表：带别名前缀；单依赖别名 rely/空时额外写裸 key 兼容旧占位符 */
+    private void putRelyFlat(Map<String, String> out, String alias, Map<String, String> flat, boolean singleLegacy) {
+        String a = alias == null ? "" : alias.trim();
+        boolean writeBare = StringUtils.isEmpty(a) || (singleLegacy && "rely".equalsIgnoreCase(a));
+        for (Map.Entry<String, String> e : flat.entrySet()) {
+            String field = e.getKey();
+            String val = e.getValue() == null ? "" : e.getValue();
+            if (StringUtils.isNotEmpty(a)) {
+                out.put(a + "." + field, val);
+            }
+            if (writeBare) {
+                out.putIfAbsent(field, val);
+            }
+        }
+    }
+
+    /**
+     * 生效依赖列表：优先 relyList / relyListJson；否则用旧字段 relyDatasourceId 合成 alias=rely。
+     */
+    private List<DsApiRelyItem> effectiveRelyList(DsApiDatasource entity) {
+        if (entity == null) {
+            return Collections.emptyList();
+        }
+        List<DsApiRelyItem> list = entity.getRelyList();
+        if (list == null || list.isEmpty()) {
+            list = parseRelyListJson(entity.getRelyListJson());
+        }
+        if ((list == null || list.isEmpty()) && entity.getRelyDatasourceId() != null && entity.getRelyDatasourceId() > 0) {
+            DsApiRelyItem one = new DsApiRelyItem();
+            one.setAlias("rely");
+            one.setDatasourceId(entity.getRelyDatasourceId());
+            one.setSort(1);
+            return Collections.singletonList(one);
+        }
+        if (list == null || list.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<DsApiRelyItem> copy = new ArrayList<>(list);
+        copy.sort(Comparator.comparing(i -> i.getSort() == null ? Integer.MAX_VALUE : i.getSort()));
+        return copy;
+    }
+
+    private List<DsApiRelyItem> parseRelyListJson(String json) {
+        if (StringUtils.isEmpty(json)) {
+            return Collections.emptyList();
+        }
+        try {
+            List<DsApiRelyItem> list = JSON.parseArray(json, DsApiRelyItem.class);
+            return list == null ? Collections.emptyList() : list;
+        } catch (Exception e) {
+            log.warn("parse relyListJson failed: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /** 保存前：校验并序列化 relyList，同步兼容字段 relyDatasourceId */
+    private void syncRelyList(DsApiDatasource entity) {
+        if (entity == null) {
+            return;
+        }
+        if (!Integer.valueOf(0).equals(entity.getBelongToRelyDatasource())) {
+            entity.setRelyDatasourceId(null);
+            entity.setRelyList(null);
+            entity.setRelyListJson(null);
+            return;
+        }
+        List<DsApiRelyItem> list = entity.getRelyList();
+        if (list == null || list.isEmpty()) {
+            list = parseRelyListJson(entity.getRelyListJson());
+        }
+        if ((list == null || list.isEmpty()) && entity.getRelyDatasourceId() != null && entity.getRelyDatasourceId() > 0) {
+            DsApiRelyItem one = new DsApiRelyItem();
+            one.setAlias("rely");
+            one.setDatasourceId(entity.getRelyDatasourceId());
+            one.setSort(1);
+            list = new ArrayList<>();
+            list.add(one);
+        }
+        if (list == null || list.isEmpty()) {
+            throw new IllegalArgumentException("已开启依赖数据源，请至少配置一项依赖API");
+        }
+        Set<String> aliases = new HashSet<>();
+        List<DsApiRelyItem> normalized = new ArrayList<>();
+        int idx = 0;
+        for (DsApiRelyItem raw : list) {
+            if (raw == null) {
+                continue;
+            }
+            idx++;
+            String alias = raw.getAlias() == null ? "" : raw.getAlias().trim();
+            if (StringUtils.isEmpty(alias)) {
+                throw new IllegalArgumentException("第" + idx + "个依赖别名不能为空");
+            }
+            if (!RELY_ALIAS_PATTERN.matcher(alias).matches()) {
+                throw new IllegalArgumentException("依赖别名不合法: " + alias + "（需字母开头，仅字母数字下划线）");
+            }
+            String aliasKey = alias.toLowerCase(Locale.ROOT);
+            if (!aliases.add(aliasKey)) {
+                throw new IllegalArgumentException("依赖别名重复: " + alias);
+            }
+            if (raw.getDatasourceId() == null || raw.getDatasourceId() <= 0) {
+                throw new IllegalArgumentException("依赖别名 " + alias + " 未选择API数据源");
+            }
+            if (entity.getId() != null && entity.getId().equals(raw.getDatasourceId())) {
+                throw new IllegalArgumentException("不能依赖自身: " + alias);
+            }
+            DsApiRelyItem item = new DsApiRelyItem();
+            item.setAlias(alias);
+            item.setDatasourceId(raw.getDatasourceId());
+            item.setSort(raw.getSort() == null ? idx : raw.getSort());
+            normalized.add(item);
+        }
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("已开启依赖数据源，请至少配置一项依赖API");
+        }
+        normalized.sort(Comparator.comparing(i -> i.getSort() == null ? Integer.MAX_VALUE : i.getSort()));
+        entity.setRelyList(normalized);
+        entity.setRelyListJson(JSON.toJSONString(normalized));
+        entity.setRelyDatasourceId(normalized.get(0).getDatasourceId());
     }
 
     /**
@@ -1294,6 +1450,10 @@ public class DsApiDatasourceServiceImpl implements IDsApiDatasourceService {
         }
         if (entity.getReqParams() == null) {
             entity.setReqParams(new DsApiReqParams());
+        }
+        // 依赖列表：优先已有 relyList；否则从 JSON / 旧单字段合成，供前端回显
+        if (entity.getRelyList() == null || entity.getRelyList().isEmpty()) {
+            entity.setRelyList(new ArrayList<>(effectiveRelyList(entity)));
         }
         // 读库兼容：历史行 datasource_type 为空时按 HTTP
         if (StringUtils.isEmpty(entity.getDatasourceType())) {

@@ -5,11 +5,14 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.winter.cloud.common.mybatis.domain.entity.DefaultBaseEntity;
+import com.winter.cloud.datasource.domain.dto.DsApiRelyItem;
 import com.winter.cloud.datasource.domain.dto.DsApiReqParams;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.util.List;
 
 /**
  * API 数据源配置
@@ -65,12 +68,27 @@ public class DsApiDatasource extends DefaultBaseEntity {
     @Schema(description = "请求参数对象")
     private DsApiReqParams reqParams;
 
-    /** 依赖的 API 数据源主键；序列化为字符串，避免前端雪花精度丢失 */
+    /**
+     * 兼容字段：单依赖时的 API 数据源主键（多依赖时同步为列表第一项）。
+     * 序列化为字符串，避免前端雪花精度丢失。
+     */
     @JsonSerialize(using = ToStringSerializer.class)
-    @Schema(description = "依赖API数据源ID")
+    @Schema(description = "依赖API数据源ID（兼容旧单依赖；多依赖时取列表首项）")
     private Long relyDatasourceId;
 
-    /** 是否依赖其它数据源：0 是（需配置 relyDatasourceId），1 否 */
+    /**
+     * 多依赖列表 JSON 原文（入库字段）。
+     * 结构：[{ "alias":"auth", "datasourceId":"123", "sort":1 }, ...]
+     */
+    @Schema(description = "依赖API列表JSON")
+    private String relyListJson;
+
+    /** 非表字段：由 relyListJson 解析；编辑页直接提交此列表 */
+    @TableField(exist = false)
+    @Schema(description = "依赖API列表")
+    private List<DsApiRelyItem> relyList;
+
+    /** 是否依赖其它数据源：0 是（需配置 relyList / relyDatasourceId），1 否 */
     @Schema(description = "是否依赖数据源：0是，1否")
     private Integer belongToRelyDatasource;
 
