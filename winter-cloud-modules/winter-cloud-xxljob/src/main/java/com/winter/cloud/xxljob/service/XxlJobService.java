@@ -107,4 +107,9 @@ public interface XxlJobService {
      * @return
      */
     ReturnT<String> batchStart(List<Long> ids);
+
+    /**
+     * 按 cron、执行器和生效时间匹配第一条任务。
+     */
+    XxlJobInfo selectByCronAndJobGroup(XxlJobInfo xxlJobInfo);
 }

@@ -465,4 +465,9 @@ public class XxlJobServiceImpl implements XxlJobService {
         return ReturnT.SUCCESS;
     }
 
+    @Override
+    public XxlJobInfo selectByCronAndJobGroup(XxlJobInfo xxlJobInfo) {
+        return xxlJobInfoDao.selectByCronAndJobGroup(xxlJobInfo);
+    }
+
 }

@@ -90,6 +90,41 @@ public class XxlJobInfoServiceImpl implements IXxlJobInfoService {
     }
 
     @Override
+    public void batchRemove(List<Long> ids) {
+        requireIds(ids);
+        assertOk(xxlJobService.batchRemove(ids));
+    }
+
+    @Override
+    public void batchStop(List<Long> ids) {
+        requireIds(ids);
+        assertOk(xxlJobService.batchStop(ids));
+    }
+
+    @Override
+    public void batchStart(List<Long> ids) {
+        requireIds(ids);
+        assertOk(xxlJobService.batchStart(ids));
+    }
+
+    @Override
+    public int addFromCron(Map<String, Object> job) {
+        XxlJobInfo jobInfo = toInfo(job);
+        XxlJobInfo exists = xxlJobService.selectByCronAndJobGroup(jobInfo);
+        int id;
+        if (exists != null) {
+            id = exists.getId();
+        } else {
+            ReturnT<String> created = xxlJobService.add(jobInfo);
+            assertOk(created);
+            id = Integer.parseInt(created.getContent());
+        }
+        // 已存在也要启用，和原 JobInfoController.addFromCron 一致
+        assertOk(xxlJobService.start(id));
+        return id;
+    }
+
+    @Override
     public void trigger(int id, String executorParam, String addressList) {
         if (executorParam == null) {
             executorParam = "";
@@ -150,6 +185,12 @@ public class XxlJobInfoServiceImpl implements IXxlJobInfoService {
 
     private XxlJobInfo toInfo(Map<String, Object> job) {
         return JSON.parseObject(JSON.toJSONString(job), XxlJobInfo.class);
+    }
+
+    private void requireIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new IllegalStateException("任务id不能为空");
+        }
     }
 
     private void assertOk(ReturnT<String> ret) {

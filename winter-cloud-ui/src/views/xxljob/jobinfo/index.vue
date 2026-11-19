@@ -68,7 +68,7 @@
     </el-table>
     <pagination v-show="total>0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
 
-    <el-dialog :title="title" :visible.sync="open" width="920px" append-to-body custom-class="xxl-jobinfo-dialog">
+    <el-dialog :title="title" :visible.sync="open" width="920px" append-to-body custom-class="xxl-jobinfo-dialog" @opened="onJobDialogOpened">
       <el-form ref="form" :model="form" :rules="rules" label-width="120px" size="small">
         <fieldset class="xxl-fieldset"><legend>基础配置</legend>
           <el-row :gutter="16">
@@ -108,7 +108,7 @@
               <el-form-item v-if="form.glueType==='BEAN'" label="JobHandler" prop="executorHandler"><el-input v-model="form.executorHandler" /></el-form-item>
             </el-col>
           </el-row>
-          <el-form-item label="任务参数"><el-input v-model="form.executorParam" type="textarea" :rows="2" /></el-form-item>
+          <el-form-item label="任务参数"><executor-param-editor ref="paramEditor" /></el-form-item>
         </fieldset>
         <fieldset class="xxl-fieldset"><legend>高级配置</legend>
           <el-row :gutter="16">
@@ -148,9 +148,9 @@
       <div slot="footer" class="dialog-footer"><el-button type="primary" @click="nextTimeOpen=false">确 定</el-button></div>
     </el-dialog>
 
-    <el-dialog title="执行一次" :visible.sync="triggerOpen" width="520px" append-to-body>
+    <el-dialog title="执行一次" :visible.sync="triggerOpen" width="720px" append-to-body @opened="onTriggerDialogOpened">
       <el-form label-width="100px" size="small">
-        <el-form-item label="任务参数"><el-input v-model="triggerForm.executorParam" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="任务参数"><executor-param-editor ref="triggerParamEditor" /></el-form-item>
         <el-form-item label="机器地址"><el-input v-model="triggerForm.addressList" placeholder="请输入本次执行的机器地址，为空则从执行器获取" /></el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer"><el-button type="primary" @click="submitTrigger">执行</el-button><el-button @click="triggerOpen=false">取 消</el-button></div>
@@ -183,13 +183,14 @@
 
 <script>
 import XxlCronGen from '../components/XxlCronGen'
+import ExecutorParamEditor from '../components/ExecutorParamEditor'
 import { listAllJobGroup } from '@/api/xxljob/jobgroup'
 import { listJobInfo, jobEnums, addJobInfo, updateJobInfo, delJobInfo, startJobInfo, stopJobInfo, triggerJobInfo, nextTriggerTime, getJobInfo, saveJobGlue } from '@/api/xxljob/jobinfo'
 import { scheduleTypeLabel, misfireLabel, routeLabel, blockLabel, glueTypeLabel, labelOf, optionsOf } from '../dict'
 
 export default {
   name: 'XxlJobInfo',
-  components: { XxlCronGen },
+  components: { XxlCronGen, ExecutorParamEditor },
   data() {
     const scheduleConfValidator = (rule, value, callback) => {
       if (this.form.scheduleType === 'CRON' || this.form.scheduleType === 'FIX_RATE') {
@@ -310,11 +311,64 @@ export default {
       this.open = true
       this.title = '新增任务'
     },
+    onJobDialogOpened() {
+      this.$nextTick(() => {
+        if (this.$refs.paramEditor) this.$refs.paramEditor.load(this.form.executorParam || '')
+      })
+    },
+    onTriggerDialogOpened() {
+      this.$nextTick(() => {
+        if (this.$refs.triggerParamEditor) this.$refs.triggerParamEditor.load(this.triggerForm.executorParam || '')
+      })
+    },
+    /**
+     * 提交前收口任务参数。像 JSON 但格式不合法时，先问是去改还是按原文保存。
+     */
+    commitParam(refName) {
+      const editor = this.$refs[refName]
+      if (!editor) {
+        this.$modal.msgError('任务参数组件未就绪')
+        return Promise.reject(new Error('editor'))
+      }
+      const finish = result => {
+        if (result.ok) return Promise.resolve(result.value)
+        this.$modal.msgError(result.message || '任务参数无法保存')
+        editor.focusProblem()
+        return Promise.reject(new Error(result.message || 'param'))
+      }
+      const result = editor.commit()
+      if (result.ok || !result.needConfirm) return finish(result)
+      const html = String(result.message)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>')
+      return this.$confirm(html, '系统提示', {
+        confirmButtonText: '去修改',
+        cancelButtonText: '仍按原文保存',
+        distinguishCancelAndClose: true,
+        dangerouslyUseHTMLString: true,
+        type: 'warning'
+      }).then(() => {
+        editor.focusProblem()
+        return Promise.reject(new Error('edit'))
+      }).catch(action => {
+        if (action === 'cancel') {
+          editor.forceRaw()
+          return finish(editor.commit())
+        }
+        if (!(action instanceof Error)) editor.focusProblem()
+        return Promise.reject(action instanceof Error ? action : new Error('cancel'))
+      })
+    },
     submitForm() {
       this.$refs.form.validate(valid => {
         if (!valid) return
-        const req = this.form.id ? updateJobInfo(this.form) : addJobInfo(this.form)
-        req.then(() => { this.$modal.msgSuccess('操作成功'); this.open = false; this.getList() })
+        this.commitParam('paramEditor').then(value => {
+          this.form.executorParam = value
+          const req = this.form.id ? updateJobInfo(this.form) : addJobInfo(this.form)
+          req.then(() => { this.$modal.msgSuccess('操作成功'); this.open = false; this.getList() })
+        }).catch(() => {})
       })
     },
     handleDelete(row) {
@@ -325,7 +379,12 @@ export default {
       req.then(() => { this.$modal.msgSuccess(row.triggerStatus === 1 ? '已停止' : '已启动'); this.getList() })
     },
     openTrigger(row) { this.triggerForm = { id: row.id, executorParam: row.executorParam || '', addressList: '' }; this.triggerOpen = true },
-    submitTrigger() { triggerJobInfo(this.triggerForm).then(() => { this.$modal.msgSuccess('触发成功'); this.triggerOpen = false }) },
+    submitTrigger() {
+      this.commitParam('triggerParamEditor').then(value => {
+        this.triggerForm.executorParam = value
+        triggerJobInfo(this.triggerForm).then(() => { this.$modal.msgSuccess('触发成功'); this.triggerOpen = false })
+      }).catch(() => {})
+    },
     goLog(row) { this.$router.push({ path: '/xxljob/joblog', query: { jobGroup: row.jobGroup, jobId: row.id } }) },
     openGlue(row) {
       getJobInfo(row.id).then(res => {

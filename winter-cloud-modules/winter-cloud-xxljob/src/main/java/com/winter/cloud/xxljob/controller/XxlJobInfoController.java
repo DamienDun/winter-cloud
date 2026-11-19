@@ -6,6 +6,7 @@ import com.winter.cloud.common.core.web.page.TableDataInfo;
 import com.winter.cloud.common.log.annotation.Log;
 import com.winter.cloud.common.log.enums.BusinessType;
 import com.winter.cloud.common.security.annotation.RequiresPermissions;
+import com.winter.cloud.xxljob.dto.JobBatchInput;
 import com.winter.cloud.xxljob.service.IXxlJobInfoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -135,6 +136,57 @@ public class XxlJobInfoController extends BaseController {
             String addressList = body.get("addressList") == null ? "" : String.valueOf(body.get("addressList"));
             jobInfoService.trigger(id, executorParam, addressList);
             return success();
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
+    @RequiresPermissions("xxljob:jobinfo:remove")
+    @Log(title = "XXL-JOB Info", businessType = BusinessType.DELETE)
+    @PostMapping("/batchRemove")
+    @Operation(summary = "批量删除任务")
+    public AjaxResult batchRemove(@RequestBody JobBatchInput input) {
+        try {
+            jobInfoService.batchRemove(input == null ? null : input.getIds());
+            return success();
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
+    @RequiresPermissions("xxljob:jobinfo:edit")
+    @Log(title = "XXL-JOB Info", businessType = BusinessType.UPDATE)
+    @PostMapping("/batchStop")
+    @Operation(summary = "批量停止任务")
+    public AjaxResult batchStop(@RequestBody JobBatchInput input) {
+        try {
+            jobInfoService.batchStop(input == null ? null : input.getIds());
+            return success();
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
+    @RequiresPermissions("xxljob:jobinfo:edit")
+    @Log(title = "XXL-JOB Info", businessType = BusinessType.UPDATE)
+    @PostMapping("/batchStart")
+    @Operation(summary = "批量启动任务")
+    public AjaxResult batchStart(@RequestBody JobBatchInput input) {
+        try {
+            jobInfoService.batchStart(input == null ? null : input.getIds());
+            return success();
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
+    @RequiresPermissions("xxljob:jobinfo:add")
+    @Log(title = "XXL-JOB Info", businessType = BusinessType.INSERT)
+    @PostMapping("/addFromCron")
+    @Operation(summary = "按 cron 新增任务，已存在则直接启用")
+    public AjaxResult addFromCron(@RequestBody Map<String, Object> body) {
+        try {
+            return success(jobInfoService.addFromCron(body));
         } catch (Exception e) {
             return error(e.getMessage());
         }

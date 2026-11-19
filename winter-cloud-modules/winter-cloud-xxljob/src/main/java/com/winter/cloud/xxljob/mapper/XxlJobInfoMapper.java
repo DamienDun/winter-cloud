@@ -60,4 +60,9 @@ public interface XxlJobInfoMapper {
      * @return
      */
     int batchStop(@Param("ids") List<Long> ids);
+
+    /**
+     * 按 cron、执行器、调度类型等条件匹配第一条任务。
+     */
+    XxlJobInfo selectByCronAndJobGroup(XxlJobInfo xxlJobInfo);
 }

@@ -254,6 +254,36 @@
 			trigger_status = #{triggerStatus}
 		WHERE id = #{id}
 	</update>
+    <select id="selectByCronAndJobGroup" resultMap="XxlJobInfo">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM xxl_job_info AS t
+        <where>
+            <if test="jobGroup != null">
+                AND t.job_group = #{jobGroup}
+            </if>
+            <if test="scheduleConf != null and scheduleConf != ''">
+                AND t.schedule_conf = #{scheduleConf}
+            </if>
+            <if test="scheduleType != null and scheduleType != ''">
+                AND t.schedule_type = #{scheduleType}
+            </if>
+            <if test="misfireStrategy != null and misfireStrategy != ''">
+                AND t.misfire_strategy = #{misfireStrategy}
+            </if>
+            <if test="executorHandler != null and executorHandler != ''">
+                AND t.executor_handler = #{executorHandler}
+            </if>
+            <if test="effectiveTimeBegin != null">
+                AND t.effective_time_begin = #{effectiveTimeBegin}
+            </if>
+            <if test="effectiveTimeEnd != null">
+                AND t.effective_time_end = #{effectiveTimeEnd}
+            </if>
+        </where>
+        LIMIT 1
+    </select>
+
     <update id="batchStop">
         UPDATE xxl_job_info
         SET

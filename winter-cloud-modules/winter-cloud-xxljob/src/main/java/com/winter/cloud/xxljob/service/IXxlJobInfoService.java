@@ -13,6 +13,11 @@ public interface IXxlJobInfoService {
     void remove(int id);
     void start(int id);
     void stop(int id);
+    void batchRemove(List<Long> ids);
+    void batchStop(List<Long> ids);
+    void batchStart(List<Long> ids);
+    /** 按 cron 等条件查找，没有则新增，然后启用。返回任务 id */
+    int addFromCron(Map<String, Object> job);
     void trigger(int id, String executorParam, String addressList);
     List<String> nextTriggerTime(String scheduleType, String scheduleConf);
     /** GLUE IDE：保存源码并写入历史 */
